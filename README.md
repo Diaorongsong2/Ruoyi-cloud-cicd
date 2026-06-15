@@ -5,7 +5,7 @@
 GitLab（代码托管） → Jenkins（自动构建打包） → Harbor（私有镜像仓库） → Kubernetes（容器编排上线）
 
 ## 环境栈
-- 系统：Rocky Linux 9
+- 系统：centos7
 - K8s 集群
 - Jenkins + GitLab CI
 - Harbor 私有镜像仓库
