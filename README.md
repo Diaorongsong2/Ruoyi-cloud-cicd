@@ -1,2 +1,23 @@
-# CI-CD-K8s-
-本项目为 RuoYi-Cloud 3.8.5 微服务全流程部署 SOP，实现 GitLab 代码托管、Jenkins 自动化构建、Harbor 镜像仓库、Kubernetes 容器化上线整套流水线，为个人实战学习记录。
+# CI-CD-K8s
+## 项目介绍
+基于 RuoYi-Cloud 3.8.5 微服务搭建完整云原生自动化交付流水线，整套环境全手动从零搭建，完整记录部署SOP，用于个人运维/云原生岗位面试作品集。
+整套技术链路：
+GitLab（代码托管） → Jenkins（自动构建打包） → Harbor（私有镜像仓库） → Kubernetes（容器编排上线）
+
+## 环境栈
+- 系统：Rocky Linux 9
+- K8s 集群
+- Jenkins + GitLab CI
+- Harbor 私有镜像仓库
+- RuoYi-Cloud 微服务后端+前端
+
+## 仓库文件说明
+1. `RuoYi-Cloud-CICD部署SOP.md`：完整操作标准作业流程，含所有命令、配置、排坑记录
+2. `/k8s-yaml`：项目所有容器部署资源清单
+3. `/jenkins`：自动化流水线Jenkinsfile脚本
+
+## 核心实现能力
+1. 独立搭建多节点K8s集群，完成微服务容器化改造
+2. 搭建完整CI/CD自动化流水线，代码提交自动构建、推送镜像、滚动更新服务
+3. 私有镜像仓库Harbor权限、镜像生命周期管理
+4. 日常运维排错、服务发布回滚、资源监控基础操作
