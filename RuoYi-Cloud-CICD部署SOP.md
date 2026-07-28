@@ -94,7 +94,7 @@ yum install -y wget vim net-tools gcc gcc-c++ make
 Docker version 20.10.16, build aa7e414
 ```
 
-![image-20260729023824573](C:\Users\刁荣松\Desktop\images\image-20260729023824573.png)
+![Docker卸载旧版本配置阿里源](images/image-20260729023824573.png)
 
 
 
@@ -119,7 +119,7 @@ Docker version 20.10.16, build aa7e414
 [root@docker ~]# mvn -v
 ```
 
-![image-20260729030128358](C:\Users\刁荣松\Desktop\images\image-20260729030128358.png)
+![指定版本Docker安装验证](images/image-20260729030128358.png)
 
 ### **3.1.2 安装Node.js（14.4.0，前端构建依赖）**
 
@@ -142,7 +142,7 @@ v16.20.2
 8.19.4
 ```
 
-![image-20260729030158637](C:\Users\刁荣松\Desktop\images\image-20260729030158637.png)
+![Docker Compose安装部署](images/image-20260729030158637.png)
 
 ### **3.1.3 安装Git（代码拉取依赖）**
 
@@ -153,7 +153,6 @@ v16.20.2
 [root@docker ~]# git --version
 ```
 
-![1773826439739](C:\Users\刁荣松\AppData\Local\Temp\1773826439739.png)
 
 ### **3.1.4 组件整体验证**
 
@@ -174,7 +173,7 @@ git version 1.8.3.1
 
 ```
 
-![image-20260729030243745](C:\Users\刁荣松\Desktop\images\image-20260729030243745.png)
+![Docker服务开机自启配置](images/image-20260729030243745.png)
 
 ## **3.2 GitLab服务器（192.168.44.24）部署**
 
@@ -199,7 +198,7 @@ Chef Client finished, 527/1423 resources updated in 02 minutes 05 seconds
 gitlab Reconfigured!
 ```
 
-![image-20260729030534218](C:\Users\刁荣松\Desktop\images\image-20260729030534218.png)
+![GitLab容器部署启动日志](images/image-20260729030534218.png)
 
 **补充说明**：GitLab初始化需要5-10分钟，启动后请等待片刻再访问网页端。
 
@@ -211,9 +210,9 @@ gitlab Reconfigured!
 
 3. 设置完成后，使用root账号密码登录GitLab
 
-![image-20260729030652306](C:\Users\刁荣松\Desktop\images\image-20260729030652306.png)
+![GitLab初始化访问页面](images/image-20260729030652306.png)
 
-![image-20260729030713537](C:\Users\刁荣松\Desktop\images\image-20260729030713537.png)
+![GitLab管理员初始密码查看](images/image-20260729030713537.png)
 
 ## **3.3 Jenkins服务器（192.168.44.23）部署**
 
@@ -256,7 +255,7 @@ jenkins-2.361.4-1.1.noarch.rpm
 tcp   LISTEN 0      50     *:8080     *:*    users:(("java",pid=13602,fd=8))
 ```
 
-![image-20260729030852046](C:\Users\刁荣松\Desktop\images\image-20260729030852046.png)
+![Jenkins容器拉起运行](images/image-20260729030852046.png)
 
 **3.3.2 Jenkins初始化配置**
 
@@ -270,7 +269,7 @@ tcp   LISTEN 0      50     *:8080     *:*    users:(("java",pid=13602,fd=8))
 
 5. 完成初始化，进入Jenkins首页
 
-![image-20260729030930354](C:\Users\刁荣松\Desktop\images\image-20260729030930354.png)
+![Jenkins解锁初始页面](images/image-20260729030930354.png)
 
 ## **3.4 Harbor服务器（192.168.44.30）部署**
 
@@ -290,7 +289,7 @@ chmod +x /usr/local/bin/docker-compose
 docker-compose --version
 ```
 
-![image-20260729031032152](C:\Users\刁荣松\Desktop\images\image-20260729031032152.png)
+![Harbor Compose编排部署](images/image-20260729031032152.png)
 
 ### **3.4.2 部署并配置Harbor**
 
@@ -316,7 +315,7 @@ vim harbor.yml
 docker-compose ps
 ```
 
-![image-20260729031203150](C:\Users\刁荣松\Desktop\images\image-20260729031203150.png)
+![Harbor后台登录首页](images/image-20260729031203150.png)
 
 ### **3.4.3 网页端验证Harbor**
 
@@ -325,7 +324,7 @@ docker-compose ps
 2. 使用账号：admin，密码：123456登录
 3. 登录后，创建项目（命名为ruoyi-cloud，用于存储若依项目镜像
 
-![image-20260729031244317](C:\Users\刁荣松\Desktop\images\image-20260729031244317.png)
+![Harbor创建私有项目仓库](images/image-20260729031244317.png)
 
 ## **3.5 K8s集群验证（复用已有环境，无需重新搭建）**
 
@@ -337,7 +336,7 @@ docker-compose ps
 [root@master ~]# kubectl get nodes
 ```
 
-![image-20260729031512396](C:\Users\刁荣松\Desktop\images\image-20260729031512396.png)
+![K8s集群节点状态检查](images/image-20260729031512396.png)
 
 ### **3.5.2 核心组件状态验证（Master节点192.168.44.20执行）**
 
@@ -345,7 +344,7 @@ docker-compose ps
 [root@master ~]# kubectl get pods -n kube-system
 ```
 
-![image-20260729031544297](C:\Users\刁荣松\Desktop\images\image-20260729031544297.png)
+![K8s系统核心Pod运行状态](images/image-20260729031544297.png)
 
 # **4. 本地ruoyi-cloud代码验证**
 
@@ -367,7 +366,7 @@ docker-compose ps
 
 4. 验证安装：打开CMD，输入java -version，输出版本信息即正常
 
-![image-20260729031618971](C:\Users\刁荣松\Desktop\images\image-20260729031618971.png)
+![本地JDK环境配置校验](images/image-20260729031618971.png)
 
 ### **4.1.2 安装Maven 3.8.6**
 
@@ -391,7 +390,7 @@ docker-compose ps
 
 5. 验证安装：CMD输入mvn -v，输出版本信息即正常
 
-![image-20260729031638674](C:\Users\刁荣松\Desktop\images\image-20260729031638674.png)
+![Maven阿里云镜像源配置](images/image-20260729031638674.png)
 
 ### **4.1.3 安装MySQL 8.0.36 & Redis 6.2.14**
 
@@ -422,7 +421,7 @@ docker-compose ps
 git clone https://gitee.com/y_project/RuoYi-Cloud.git ruoyi-cloud
 ```
 
-![image-20260729031722081](C:\Users\刁荣松\Desktop\images\image-20260729031722081.png)
+![拉取RuoYi源码](images/image-20260729031722081.png)
 
 ### **4.2.2 后端配置（IDEA打开项目）**
 
@@ -485,7 +484,7 @@ git clone https://gitee.com/y_project/RuoYi-Cloud.git ruoyi-cloud
 
 ￮ 点击“Create project”，完成项目创建
 
-![image-20260729032045936](C:\Users\刁荣松\Desktop\images\image-20260729032045936.png)
+![GitLab新建项目](images/image-20260729032045936.png)
 
 ## **5.2 本地代码上传到GitLab**
 
@@ -552,7 +551,7 @@ git push -u origin dev
 
 6. Pipeline Plugin（流水线配置）
 
-![image-20260729032450732](C:\Users\刁荣松\Desktop\images\image-20260729032450732.png)
+![Jenkins插件页面](images/image-20260729032450732.png)
 
 ### **6.1.2 配置Maven、NodeJS环境**
 
@@ -568,7 +567,7 @@ git push -u origin dev
 
 5. 点击页面底部「保存」，完成环境配置
 
-![image-20260729032521452](C:\Users\刁荣松\Desktop\images\image-20260729032521452.png)
+![Maven全局配置](images/image-20260729032521452.png)
 
 ### **6.1.3 关联GitLab（授权拉取代码）**
 
@@ -588,7 +587,7 @@ git push -u origin dev
 
 7. 点击「保存」，完成GitLab关联
 
-   ![image-20260729032850184](C:\Users\刁荣松\Desktop\images\image-20260729032850184.png)
+![GitLab授权配置](images/image-20260729032850184.png)
 
 ### **6.1.4 配置Docker Agent构建机（关联Jenkins）**
 
@@ -618,7 +617,7 @@ Node name：Docker-Agent-192.168.44.10（自定义，便于识别）
 
 9. 点击「保存」，然后点击节点名称，点击「启动代理」，显示「Agent is connected」即关联成功
 
-![image-20260729033436689](C:\Users\刁荣松\Desktop\images\image-20260729033436689.png)
+![Agent节点配置](images/image-20260729033436689.png)
 
 ## 6.2 编写统一Jenkinsfile及相关配置文件（提交到GitLab）
 
@@ -849,11 +848,11 @@ CMD ["nginx", "-g", "daemon off;"]
 
 2. 点击构建记录（如#1），点击「Console Output」，查看构建日志，确保每个阶段（拉取代码、并行构建前后端、并行构建镜像、并行推送镜像、清理镜像）无报错，最终显示「前后端统一流水线构建成功！」
 
-   ![image-20260729033705994](C:\Users\刁荣松\Desktop\images\image-20260729033705994.png)
+![流水线构建日志](images/image-20260729033705994.png)
 
 3. 验证Harbor镜像：登录Harbor（http://192.168.44.30），进入ruoyi-cloud项目，查看是否同时存在前端和后端的镜像
 
-   ![image-20260729033804580](C:\Users\刁荣松\Desktop\images\image-20260729033804580.png)
+![Harbor镜像列表](images/image-20260729033804580.png)
 
 
 
@@ -874,7 +873,7 @@ cd /root/ruoyi-cloud-k8s
     \# 查看密钥是否创建成功
     kubectl get secrets
 
-![image-20260729034205035](C:\Users\刁荣松\Desktop\images\image-20260729034205035.png)
+![创建镜像拉取密钥](images/image-20260729034205035.png)
 
 ## **7.2 中间件服务部署（ruoyi-cloud-backend）**
 
@@ -919,19 +918,19 @@ cd /root/ruoyi-cloud-k8s
    
    ```
 
-   ![image-20260729034255587](C:\Users\刁荣松\Desktop\images\image-20260729034255587.png)
+   ![Nginx配置文件预览](images/image-20260729034255587.png)
 
 ### **7.2.2 创建Deployment（部署后端容器）**
 
 
 
-![image-20260729034943705](C:\Users\刁荣松\Desktop\images\image-20260729034943705.png)
+![后端Deployment资源](images/image-20260729034943705.png)
 
 
 
 ### **7.2.3 创建Service（暴露后端服务，供前端访问）**
 
-![image-20260729035032696](C:\Users\刁荣松\Desktop\images\image-20260729035032696.png)
+![Service资源配置](images/image-20260729035032696.png)
 
 
 ## 7.3 服务部署
@@ -1648,39 +1647,39 @@ spec:
 }
 ```
 
-![image-20260729035127279](C:\Users\刁荣松\Desktop\images\image-20260729035127279.png)
+![部署执行日志](images/image-20260729035127279.png)
 
 ## **7.4 部署验证（检查所有资源状态）**
 
 2. 确保所有资源状态正常：ConfigMap存在、Deployment READY 1/1、Pod Running、Service正常暴露端口，后端Pod日志无报错。
 
-![image-20260729035143502](C:\Users\刁荣松\Desktop\images\image-20260729035143502.png)
+![Pod与服务列表](images/image-20260729035143502.png)
 
 **补充说明**：若Pod状态为Pending，可能是镜像拉取失败（检查密钥、Harbor地址）；若为CrashLoopBackOff，查看Pod日志排查配置问题（如数据库、Nacos连接失败）。
 
 # 8.0效果展示
 
- 前端登录：![image-20260729035226954](C:\Users\刁荣松\Desktop\images\image-20260729035226954.png)
+ 前端登录：![前端登录页面](images/image-20260729035226954.png)
 
 页面展示：
 
-![image-20260729035252805](C:\Users\刁荣松\Desktop\images\image-20260729035252805.png)
+![系统管理页面1](images/image-20260729035252805.png)
 
-![image-20260729035329468](C:\Users\刁荣松\Desktop\images\image-20260729035329468.png)
+![系统管理页面2](images/image-20260729035329468.png)
 
 minio展示：
 
-![image-20260729035605129](C:\Users\刁荣松\Desktop\images\image-20260729035605129.png)
+![MinIO管理页面](images/image-20260729035605129.png)
 
 监控：
 
-![image-20260729035622191](C:\Users\刁荣松\Desktop\images\image-20260729035622191.png)
+![监控面板展示](images/image-20260729035622191.png)
 
 
 
 nacos展示：
 
-![image-20260729035647545](C:\Users\刁荣松\Desktop\images\image-20260729035647545.png)
+![Nacos控制台页面](images/image-20260729035647545.png)
 
 # 9. 生产级高可用架构升级
 
