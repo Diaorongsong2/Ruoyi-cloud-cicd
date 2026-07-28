@@ -65,7 +65,7 @@
 yum install -y wget vim net-tools gcc gcc-c++ make
 ```
 
-![image-20260729023746428](C:\Users\刁荣松\Desktop\images\image-20260729023746428.png)
+![安装基础依赖包截图](images/image-20260729023746428.png)
 
 ## **2.2 Docker安装（所有节点必装）**
 
