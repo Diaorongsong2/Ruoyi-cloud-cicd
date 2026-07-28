@@ -1,0 +1,1975 @@
+
+
+# 若依（RuoYi-Cloud）全流程部署操作日志
+
+**文档版本**：V1.0
+
+**记录人**：刁荣松
+
+**核心项目**：ruoyi-cloud（若依微服务版本，3.8.5）
+
+**部署目标**：本地验证→GitLab托管→Jenkins自动化构建→Harbor镜像存储→K8s容器化上线，全流程标准化落地，确保服务稳定可用
+
+**部署环境**：所有节点均为 CentOS 7.9 x86_64
+
+
+
+ 
+
+[TOC]
+
+
+
+# **1. 部署架构与环境规划**
+
+## **1.1 节点架构表**
+
+说明：所有节点需提前完成系统初始化（关闭防火墙、SELinux、时间同步），确保网络互通。
+
+| 节点IP        | 节点角色      | 部署组件                                  | 核心作用                                           | 硬件配置（建议） |
+| ------------- | ------------- | ----------------------------------------- | -------------------------------------------------- | ---------------- |
+| 192.168.44.20 | K8s Master    | kube-apiserver、etcd、Docker、MySQL       | K8s集群控制节点，部署业务数据库                    | 4核8G，100G硬盘  |
+| 192.168.44.21 | K8s Node1     | kubelet、kube-proxy、Docker、Redis、Nacos | K8s工作节点，部署中间件（缓存、配置中心）          | 4核8G，100G硬盘  |
+| 192.168.44.22 | K8s Node2     | kubelet、kube-proxy、Docker、Nginx        | K8s工作节点，负载分担、Nginx备用（高可用）         | 4核8G，100G硬盘  |
+| 192.168.44.10 | Docker Agent  | Docker、Maven、Node.js、Git               | 配合Jenkins执行自动化构建、前端/后端镜像打包       | 2核4G，40G硬盘   |
+| 192.168.44.23 | Jenkins服务器 | Jenkins 2.426.3、Docker                   | CI/CD自动化流水线、镜像打包推送、任务调度          | 2核4G，40G硬盘   |
+| 192.168.44.24 | GitLab服务器  | GitLab 16.0.0、Docker                     | 代码托管、版本控制、分支管理、代码权限控制         | 2核4G，40G硬盘   |
+| 192.168.44.30 | Harbor服务器  | Harbor 2.8.3、Docker、Docker-Compose      | 私有镜像仓库、镜像管理、镜像安全校验、镜像推送拉取 | 2核4G，40G硬盘   |
+
+## **1.2 技术栈清单**
+
+| 技术/组件      | 版本要求 | 核心用途                               |
+| -------------- | -------- | -------------------------------------- |
+| JDK            | 1.8      | 后端服务运行环境，ruoyi-cloud核心依赖  |
+| Maven          | 3.8.9    | 后端项目依赖管理、打包构建             |
+| Node.js        | 14.0.0   | 前端项目依赖管理、打包构建（ruoyi-ui） |
+| MySQL          | 5.7      | 业务数据存储、ruoyi-cloud数据库支撑    |
+| Redis          | 6.2.14   | 缓存服务、会话存储、减轻数据库压力     |
+| Nacos          | 2.2.3    | 微服务配置中心、服务注册与发现         |
+| Docker         | 20.10.24 | 容器化构建、运行，统一部署环境         |
+| Docker-Compose | 2.20.2   | Harbor服务快速部署、多容器管理         |
+| Jenkins        | 2.426.3  | 自动化构建、镜像推送、流水线编排       |
+| GitLab         | 16.0.0   | 代码托管、版本控制、分支管理           |
+| Harbor         | 2.8.3    | 私有镜像仓库，存储前端、后端镜像       |
+| Kubernetes     | 1.26.0   | 容器编排、集群部署、服务负载均衡       |
+| RuoYi-Cloud    | 3.8.5    | 核心业务系统源码，微服务架构           |
+| minio          |          |                                        |
+
+ 
+
+# **2. 前置环境初始化（所有节点必做）**
+
+## **2.1安装基础依赖包 **
+
+```shell
+yum install -y wget vim net-tools gcc gcc-c++ make
+```
+
+![安装基础依赖包截图](images/image-20260729023746428.png)
+
+## **2.2 Docker安装（所有节点必装）**
+
+### **2.2.1 卸载旧版本并配置阿里云源**
+
+```shell
+# 安装Docker依赖包
+[root@docker ~]# yum install -y yum-utils device-mapper-persistent-data lvm2
+
+# 设置阿里云Docker镜像源（加速镜像拉取）
+[root@docker ~]# yum-config-manager --add-repo http://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+```
+
+**2.2.2 安装指定版本Docker并验证**
+
+```shell
+# 安装Docker CE 20.10.24（稳定版本，适配后续组件）
+[root@docker ~]# yum install -y docker-ce-20.10.16 docker-ce-cli-20.10.16 containerd.io
+
+# 启动Docker服务并设置开机自启
+[root@docker ~]# systemctl start docker
+[root@docker ~]# systemctl enable docker
+
+# 验证Docker安装成功（输出版本信息即正常）
+[root@docker ~]# docker --version
+Docker version 20.10.16, build aa7e414
+```
+
+![Docker卸载旧版本配置阿里源](images/image-20260729023824573.png)
+
+
+
+# **3. 核心组件部署（按节点执行）**
+
+## **3.1 Docker Agent节点（192.168.44.10）部署**
+
+核心作用：配合Jenkins执行前端、后端自动化构建，需安装构建依赖组件。
+
+### **3.1.1 安装Maven（3.8.9，后端构建依赖）**
+
+```shell
+# 下载Maven安装包
+[root@docker ~]# wget https://mirrors.aliyun.com/apache/maven/maven-3/3.8.9/binaries/apache-maven-3.8.9-bin.tar.gz
+
+# 解压到指定目录
+[root@docker ~]# tar -zxvf apache-maven-3.8.9-bin.tar.gz -C /usr/local/
+
+# 配置环境变量（永久生效）
+[root@docker ~]# vi /etc/profile
+[root@docker ~]# source /etc/profile
+[root@docker ~]# mvn -v
+```
+
+![指定版本Docker安装验证](images/image-20260729030128358.png)
+
+### **3.1.2 安装Node.js（14.4.0，前端构建依赖）**
+
+```shell
+# 下载Node.js安装包
+[root@docker ~]# wget https://nodejs.org/dist/v4.4.0/node-v14.4.0-linux-x64.tar.xz
+
+# 解压到指定目录（/usr/local/）
+[root@docker ~]# tar -xvf node-v14.4.0-linux-x64.tar.xz -C /usr/local/
+
+# 配置环境变量（永久生效）
+[root@docker ~]# echo "export NODE_HOME=/usr/local/node-v14.4.0-linux-x64" >> /etc/profile
+[root@docker ~]# echo "export PATH=\$NODE_HOME/bin:\$PATH" >> /etc/profile
+[root@docker ~]# source /etc/profile
+
+# 验证安装成功（输出版本信息即正常）
+[root@docker ~]# node -v
+v16.20.2
+[root@docker ~]# npm -v
+8.19.4
+```
+
+![Docker Compose安装部署](images/image-20260729030158637.png)
+
+### **3.1.3 安装Git（代码拉取依赖）**
+
+```shell
+# 安装Git
+[root@docker ~]# yum install -y git
+# 验证安装成功
+[root@docker ~]# git --version
+```
+
+
+### **3.1.4 组件整体验证**
+
+```shell
+# 依次执行以下命令，均无报错、输出版本信息即正常
+[root@docker ~]# docker --version
+Docker version 20.10.16, build aa7e414
+[root@docker ~]# mvn -v
+Apache Maven 3.8.9 (e26b057cc3a17459358ef53e4d0e2e381bf08a1c)
+Maven home: /usr/local/maven/apache-maven-3.8.9
+Java version: 1.8.0_421, vendor: Oracle Corporation, runtime: /usr/local/java/jdk1.8.0_421/jre
+Default locale: zh_CN, platform encoding: UTF-8
+OS name: "linux", version: "3.10.0-1160.71.1.el7.x86_64", arch: "amd64", family: "unix"
+[root@docker ~]# node -v
+v14.4.0
+[root@docker ~]# git --version
+git version 1.8.3.1
+
+```
+
+![Docker服务开机自启配置](images/image-20260729030243745.png)
+
+## **3.2 GitLab服务器（192.168.44.24）部署**
+
+核心作用：代码托管、版本控制，需确保容器稳定运行，网页端可正常访问。
+
+### **3.2.1 拉取GitLab镜像并启动容器**
+
+```shell
+[root@GitLab ~]# yum -y install policycoreutils-python-utils.noarch     #安装依赖包
+#安装GitLab软件包
+[root@GitLab ~]# ls
+gitlab-ce-12.4.6-ce.0.el7.x86_64.rpm
+[root@GitLab ~]# rpm -ivh --nodeps \
+> --force gitlab-ce-12.4.6-ce.0.el7.x86_64.rpm                  #强制忽略依赖安装
+
+#重载GitLab配置
+[root@GitLab ~]# gitlab-ctl reconfigure
+...
+Running handlers:
+Running handlers complete
+Chef Client finished, 527/1423 resources updated in 02 minutes 05 seconds
+gitlab Reconfigured!
+```
+
+![GitLab容器部署启动日志](images/image-20260729030534218.png)
+
+**补充说明**：GitLab初始化需要5-10分钟，启动后请等待片刻再访问网页端。
+
+### **3.2.2 网页端初始化与验证**
+
+1. 浏览器访问：http://192.168.44.24（无需端口，默认80端口）
+
+2. 首次访问需设置root账号密码
+
+3. 设置完成后，使用root账号密码登录GitLab
+
+![GitLab初始化访问页面](images/image-20260729030652306.png)
+
+![GitLab管理员初始密码查看](images/image-20260729030713537.png)
+
+## **3.3 Jenkins服务器（192.168.44.23）部署**
+
+核心作用：自动化构建、镜像推送，需挂载Docker命令，关联Docker Agent构建机。
+
+### **3.3.1 拉取Jenkins镜像并启动容器**
+
+```shell
+[root@Jenkins ~]# vim /etc/hosts
+192.168.88.30 Jenkins
+[root@Jenkins ~]# yum -y install java-11-openjdk-devel.x86_64   #安装OpenJDK11
+[root@Jenkins ~]# ln -s /usr/lib/jvm/java-11-openjdk-11.0.15.0.9-2.el8_5.x86_64/ /usr/lib/jvm/jdk                                                #创建JDK环境软链接
+[root@Jenkins ~]# vim /etc/bashrc 
+[root@Jenkins ~]# tail -2 /etc/bashrc                           #声明JAVA_HOME环境变量
+export JAVA_HOME="/usr/lib/jvm/jdk/"
+export PATH=${JAVA_HOME}/bin/:$PATH
+[root@Jenkins ~]# source /etc/bashrc                            #刷新当前bash环境
+[root@Jenkins ~]# echo ${JAVA_HOME}                             #查看JAVA_HOME变量
+/usr/lib/jvm/jdk/
+[root@Jenkins ~]# which java
+/usr/lib/jvm/jdk/bin/java
+[root@Jenkins ~]# java -version
+openjdk version "11.0.15" 2022-04-19 LTS
+OpenJDK Runtime Environment 18.9 (build 11.0.15+9-LTS)
+OpenJDK 64-Bit Server VM 18.9 (build 11.0.15+9-LTS, mixed mode, sharing)
+[root@Jenkins ~]# 
+
+#安装工具相关软件
+[root@Jenkins ~]# yum -y install git postfix    #Git用于拉取代码、postfix用于发邮件
+
+#安装Jenkins
+[root@Jenkins ~]# ls jenkins-2.361.4-1.1.noarch.rpm 
+jenkins-2.361.4-1.1.noarch.rpm
+[root@Jenkins ~]# yum -y localinstall ./jenkins-2.361.4-1.1.noarch.rpm  #安装Jenkins
+
+#启动Jenkins服务
+[root@Jenkins ~]# systemctl enable jenkins.service              #设置Jenkins开机自启动
+[root@Jenkins ~]# systemctl start jenkins.service               #启动Jenkins服务器
+[root@Jenkins ~]# ss -antpul | grep java                        #确认8080端口被监听
+tcp   LISTEN 0      50     *:8080     *:*    users:(("java",pid=13602,fd=8))
+```
+
+![Jenkins容器拉起运行](images/image-20260729030852046.png)
+
+**3.3.2 Jenkins初始化配置**
+
+1. 浏览器访问：http://192.168.44.23:8080（Jenkins默认端口8080）
+
+2. 输入查询到的初始密码，点击“继续”
+
+3. 选择“安装推荐的插件”，等待插件安装完成
+
+4. 插件安装完成后，创建管理员账号
+
+5. 完成初始化，进入Jenkins首页
+
+![Jenkins解锁初始页面](images/image-20260729030930354.png)
+
+## **3.4 Harbor服务器（192.168.44.30）部署**
+
+核心作用：私有镜像仓库，存储前端、后端镜像，需先安装Docker-Compose依赖。
+
+### **3.4.1 安装Docker-Compose（Harbor依赖）**
+
+```shell
+# 下载Docker-Compose 1.25.0版本
+wget https://github.com/docker/compose/releases/download/v1.25.0/docker-compose-linux-x86_64
+
+# 重命名并赋予执行权限（便于直接使用docker-compose命令）
+mv docker-compose-linux-x86_64 /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+
+# 验证安装成功（输出版本信息即正常）
+docker-compose --version
+```
+
+![Harbor Compose编排部署](images/image-20260729031032152.png)
+
+### **3.4.2 部署并配置Harbor**
+
+```shell
+# 下载Harbor 2.5.3离线安装包（避免在线安装卡顿）
+wget https://github.com/goharbor/harbor/releases/download/v2.5.3/harbor-offline-installer-v2.5.3.tgz
+
+# 解压安装包到指定目录（/usr/local/）
+tar -zxvf harbor-offline-installer-v2.5.3.tgz -C /usr/local/
+cd /usr/local/harbor
+
+# 复制配置文件模板（修改模板配置，避免直接修改原文件）
+cp harbor.yml.tmpl harbor.yml
+
+# 编辑配置文件（核心修改3点，使用vim编辑）
+vim harbor.yml
+# 1. 修改hostname为Harbor服务器IP：harbor: 192.168.44.30
+
+# 安装并启动Harbor（执行安装脚本）
+./install.sh
+
+# 查看Harbor所有容器运行状态（所有容器状态为Up即正常）
+docker-compose ps
+```
+
+![Harbor后台登录首页](images/image-20260729031203150.png)
+
+### **3.4.3 网页端验证Harbor**
+
+1. 浏览器访问：http://192.168.44.30（默认80端口）
+
+2. 使用账号：admin，密码：123456登录
+3. 登录后，创建项目（命名为ruoyi-cloud，用于存储若依项目镜像
+
+![Harbor创建私有项目仓库](images/image-20260729031244317.png)
+
+## **3.5 K8s集群验证（复用已有环境，无需重新搭建）**
+
+本次部署复用已搭建完成的K8s v1.26.3集群（Master：192.168.44.20；Node：192.168.44.21、22），仅需验证集群状态，确保后续项目可正常部署。
+
+### **3.5.1 节点状态验证（Master节点192.168.44.20执行）**
+
+```shell
+[root@master ~]# kubectl get nodes
+```
+
+![K8s集群节点状态检查](images/image-20260729031512396.png)
+
+### **3.5.2 核心组件状态验证（Master节点192.168.44.20执行）**
+
+```shell
+[root@master ~]# kubectl get pods -n kube-system
+```
+
+![K8s系统核心Pod运行状态](images/image-20260729031544297.png)
+
+# **4. 本地ruoyi-cloud代码验证**
+
+核心目标：在本地（Windows/macOS）搭建开发环境，验证ruoyi-cloud源码可正常启动，排除代码本身及环境依赖问题，为后续上传GitLab、自动化构建铺垫。
+
+## **4.1 本地环境准备（Windows为例，macOS操作类似）**
+
+### **4.1.1 安装JDK 1.8**
+
+1. 下载JDK 1.8：https://www.oracle.com/java/technologies/downloads/#java8-windows
+
+2. 安装JDK，记住安装路径（如C:\Program Files\Java\jdk1.8.0_381）
+
+3. 配置环境变量：
+
+￮ 新建系统变量JAVA_HOME，值为JDK安装路径
+
+￮ 在Path变量中添加%JAVA_HOME%\bin、%JAVA_HOME%\jre\bin
+
+4. 验证安装：打开CMD，输入java -version，输出版本信息即正常
+
+![本地JDK环境配置校验](images/image-20260729031618971.png)
+
+### **4.1.2 安装Maven 3.8.6**
+
+1. 下载Maven 3.8.6：https://maven.apache.org/download.cgi（选择bin.tar.gz格式）
+
+2. 解压到指定目录（如D:\apache-maven-3.8.6）
+
+3. 配置环境变量：
+
+￮ 新建系统变量MAVEN_HOME，值为Maven解压路径
+
+￮ 在Path变量中添加%MAVEN_HOME%\bin
+
+4. 配置阿里云私服（加速依赖下载）：编辑Maven安装目录下的conf/settings.xml，在mirrors标签中添加：
+        <mirror>
+    <id>aliyunmaven</id>
+    <mirrorOf>central</mirrorOf>
+    <name>阿里云公共仓库</name>
+    <url>https://maven.aliyun.com/repository/public</url>
+   </mirror>
+
+5. 验证安装：CMD输入mvn -v，输出版本信息即正常
+
+![Maven阿里云镜像源配置](images/image-20260729031638674.png)
+
+### **4.1.3 安装MySQL 8.0.36 & Redis 6.2.14**
+
+#### **MySQL安装与配置**
+
+1. 下载MySQL 5.7.36：https://dev.mysql.com/downloads/installer/
+2. 安装过程中，设置root账号密码，端口保持默认3306
+
+#### **Redis安装与配置**
+
+1. 下载Redis 6.2.14：https://github.com/tporadowski/redis/releases
+2. 解压到指定目录（如D:\Redis），双击redis-server.exe启动Redis服务（默认端口6379）
+3. 验证安装：双击redis-cli.exe，输入ping，返回PONG即正常
+
+### **4.1.4 安装Nacos 2.2.3（本地测试用）**
+
+1. 下载Nacos 2.2.3：https://nacos.io/zh-cn/docs/quick-start.html（选择zip格式）
+
+2. 解压到指定目录（如D:\nacos），进入bin目录，双击startup.cmd启动Nacos（默认端口8848）
+
+3. 验证安装：浏览器访问http://localhost:8848/nacos，使用默认账号nacos/nacos登录，即正常
+
+## **4.2 拉取并配置ruoyi-cloud源码**
+
+### **4.2.1 克隆ruoyi-cloud源码**
+
+```shell
+git clone https://gitee.com/y_project/RuoYi-Cloud.git ruoyi-cloud
+```
+
+![拉取RuoYi源码](images/image-20260729031722081.png)
+
+### **4.2.2 后端配置（IDEA打开项目）**
+
+1. 打开IDEA，导入（选择maven项目，自动加载依赖）
+2. 创建MySQL数据库：登录本地MySQL，执行项目中sql目录下的脚本（ry_20210908.sql、ry_config_20210908.sql），创建ry-cloud、ry-config两个数据库
+3. 修改后端配置文件（核心修改3处）：
+
+￮ 修改ruoyi-admin模块（ruoyi-cloud\ruoyi-admin\src\main\resources）下的application-druid.yml：配置本地MySQL地址、账号、密码（url: jdbc:mysql://localhost:3306/ry-cloud?xxx，username: root，password: Root@123）
+
+￮ 修改ruoyi-admin模块下的bootstrap.yml：配置本地Redis（host: localhost，port: 6379）、本地Nacos（server-addr: localhost:8848）
+
+￮ 修改所有微服务模块（ruoyi-gateway、ruoyi-auth等）下的bootstrap.yml，统一配置本地Nacos地址
+
+### **4.2.3 前端配置（VS Code打开项目）**
+
+1. 打开VS Code，导入ruoyi-ui模块（ruoyi-cloud\ruoyi-ui）
+
+2. 打开终端，进入ruoyi-ui目录，安装前端依赖：
+        npm install --legacy-peer-deps  # 避免依赖版本冲突
+
+3. 修改前端配置文件：编辑.ruoyi-ui\.env.development，设置VUE_APP_BASE_API = http://localhost:8080（对应后端ruoyi-admin端口）
+
+## **4.3 前后端启动与功能验证**
+
+### **4.3.1 启动后端服务（IDEA中）**
+
+1. 启动顺序：先启动Nacos（已启动）→ 启动ruoyi-gateway（网关）→ 启动ruoyi-auth（认证服务）→ 启动ruoyi-admin（核心服务）
+
+2. 观察控制台日志，无报错、显示“Started XxxApplication in xxx seconds”即启动成功
+
+### **4.3.2 启动前端服务（VS Code中）**
+
+启动成功后，浏览器自动打开http://localhost:80（前端默认端口）
+
+### **4.3.3 核心功能验证**
+
+1. 登录：使用默认账号admin，密码admin123登录系统
+
+2. 验证功能：访问“系统管理→用户管理”，查看用户列表；点击“新增用户”，测试新增功能；访问“代码生成”，测试代码生成功能
+
+**补充说明**：若启动失败，优先排查配置文件（数据库、Redis、Nacos地址），确保依赖服务正常运行。
+
+ 
+
+## **5. GitLab代码托管与分支管理**
+
+核心目标：将本地验证通过的ruoyi-cloud源码上传到GitLab，进行版本控制，为Jenkins自动化构建提供代码来源。
+
+**5.1 GitLab创建项目仓库**
+
+1. 登录GitLab（http://192.168.44.24），使用root账号登录
+
+2. 点击右上角“New project”，创建项目：
+
+￮ Project name：ruoyi-cloud（与项目名称一致）
+
+￮ Project description：若依微服务项目，全流程部署测试
+
+￮ Visibility Level：Public（测试环境，便于访问；生产环境可设为Private）
+
+￮ 点击“Create project”，完成项目创建
+
+![GitLab新建项目](images/image-20260729032045936.png)
+
+## **5.2 本地代码上传到GitLab**
+
+```shell
+# 打开CMD，进入本地ruoyi-cloud项目目录（D:\project\ruoyi-cloud）
+cd D:\project\ruoyi-cloud
+
+# 初始化git仓库（若未初始化）
+git init
+
+# 添加所有文件到暂存区
+git add .
+
+# 提交到本地仓库
+git commit -m "初始化ruoyi-cloud源码，本地验证通过"
+
+# 关联GitLab远程仓库（替换下面的地址为自己GitLab项目的地址）
+git remote add origin http://192.168.44.24/root/ruoyi-cloud.git
+
+# 拉取远程仓库（首次上传，避免冲突）
+git pull origin main --allow-unrelated-histories
+
+# 推送本地代码到GitLab远程仓库（main分支）
+git push -u origin main
+```
+
+### **5.3 GitLab分支管理（规范版本控制）**
+
+1. 在GitLab项目页面，点击“Branches”，创建分支：
+
+￮ Branch name：dev（开发分支，用于日常开发）
+
+￮ Create from：main（从主分支创建）
+
+2. 本地切换到dev分支，后续开发、修改均在dev分支进行，测试通过后再合并到main分支：
+
+        # 本地切换到dev分支
+git checkout -b dev
+\# 推送dev分支到远程仓库
+git push -u origin dev
+
+**补充说明**：分支管理规范：main分支为生产分支，仅用于发布稳定版本；dev分支为开发分支，日常开发、代码修改均在dev分支进行，测试通过后通过GitLab合并请求（Merge Request）合并到main分支，避免直接修改main分支代码。
+
+ 
+
+# **6. Jenkins CI/CD流水线配置**
+
+核心目标：配置Jenkins流水线，实现从GitLab拉取代码→自动化构建（前端/后端）→镜像打包→推送至Harbor，全程自动化，减少手动操作，确保构建一致性。
+
+## **6.1 Jenkins前置配置（关联GitLab、Docker Agent）**
+
+### **6.1.1 安装必备插件**
+
+1. 登录Jenkins（http://192.168.44.23:8080），使用admin账号登录
+
+2. 点击左侧「系统管理」→「插件管理」→「可选插件」，搜索并安装以下插件（勾选后点击「直接安装」，安装完成后重启Jenkins）：
+    Git Plugin（关联GitLab，拉取代码）
+
+3. Maven Integration Plugin（后端Maven构建）
+
+4. NodeJS Plugin（前端Node构建）
+
+5. Docker Plugin（Docker镜像打包、推送）
+
+6. Pipeline Plugin（流水线配置）
+
+![Jenkins插件页面](images/image-20260729032450732.png)
+
+### **6.1.2 配置Maven、NodeJS环境**
+
+1. 配置Maven环境：点击「系统管理」→「全局工具配置」→「Maven」→「新增Maven」，配置如下：
+    Name：Maven-3.8.6（自定义，便于识别）
+
+2. MAVEN_HOME：/usr/local/apache-maven-3.8.6（Docker Agent节点的Maven安装路径）
+
+3. 配置NodeJS环境：点击「全局工具配置」→「NodeJS」→「新增NodeJS」，配置如下：
+    Name：NodeJS-16.18.0（自定义）
+
+4. 勾选「安装自动安装」，选择版本16.18.0（与Docker Agent节点Node版本一致）
+
+5. 点击页面底部「保存」，完成环境配置
+
+![Maven全局配置](images/image-20260729032521452.png)
+
+### **6.1.3 关联GitLab（授权拉取代码）**
+
+1. 获取GitLab私人令牌：登录GitLab（http://192.168.44.24），点击右上角头像→「Preferences」→「Access Tokens」，
+
+2. Scopes：勾选「read_repository」「write_repository」
+
+3. 点击「Create personal access token」
+
+4. Jenkins配置GitLab令牌：登录Jenkins，点击「系统管理」→「系统」→「GitLab」，配置如下：
+
+​    GitLab server URL：http://192.168.44.24（GitLab服务器IP）
+
+5. Credentials：点击「添加」→「Jenkins」，选择「Username with password」，Username填root，Password填GitLab私人令牌，ID自定义（如gitlab-root-token），点击「添加」
+
+6. 点击「Test Connection」，提示「Success」即关联成功
+
+7. 点击「保存」，完成GitLab关联
+
+![GitLab授权配置](images/image-20260729032850184.png)
+
+### **6.1.4 配置Docker Agent构建机（关联Jenkins）**
+
+1. 获取Docker Agent节点密钥（用于Jenkins远程连接）：登录Docker Agent节点（192.168.44.10），执行以下命令：
+    # 生成密钥（无需输入密码，直接回车即可）
+    ssh-keygen -t rsa
+    \# 查看公钥内容，复制全部内容
+    cat ~/.ssh/id_rsa.pub
+    \# 将公钥添加到authorized_keys，授权Jenkins访问
+    cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+    chmod 600 ~/.ssh/authorized_keys
+
+2. Jenkins配置Docker Agent：点击「系统管理」→「节点管理」→「新建节点」，配置如下：
+Node name：Docker-Agent-192.168.44.10（自定义，便于识别）
+
+3. 勾选「固定节点」，点击「确定」
+
+4. 远程工作目录：/root/jenkins/workspace（自定义，用于存储构建文件）
+
+5. 标签：docker-agent（后续流水线指定该标签，关联此节点）
+
+6. 启动方式：选择「通过SSH启动代理」
+
+7. 主机：192.168.44.10（Docker Agent）
+
+8. Credentials：点击「添加」→「Jenkins」，选择「SSH Username with private key」，Username填root，Private key选择「Enter directly」，粘贴Docker Agent节点的私钥（cat ~/.ssh/id_rsa获取），ID自定义，点击「添加」
+
+9. 点击「保存」，然后点击节点名称，点击「启动代理」，显示「Agent is connected」即关联成功
+
+![Agent节点配置](images/image-20260729033436689.png)
+
+## 6.2 编写统一Jenkinsfile及相关配置文件（提交到GitLab）
+
+核心：编写单份unified-Jenkinsfile，包含前端、后端构建的所有阶段，同步执行前后端构建、镜像打包和推送；同时完善后端ruoyi-admin、前端ruoyi-ui的Dockerfile及前端配置。
+
+```shell
+pipeline {
+    agent {
+        node {
+            label 'ruoyi-cloud'
+        }
+    }
+
+    environment {
+        // K8S基础配置
+        K8S_MASTER = "192.168.44.20"
+        K8S_NAMESPACE = "default"
+        // 镜像仓库配置
+        HARBOR_ADDR = "harbor:443"
+        HARBOR_AUTH_ADDR = "https://harbor:443"
+        HARBOR_PROJECT = "ruoyi-cloud"
+        HARBOR_CRED_ID = "harbor-ruoyi"
+        DOCKER_REGISTRY = "${HARBOR_ADDR}"
+        // 关键修改：用时间戳+构建号确保镜像标签唯一
+        BUILD_TAG = "${BUILD_NUMBER}-${currentBuild.startTimeInMillis}"
+        // 构建工具路径
+        JAVA_HOME = "/usr/local/java/jdk1.8.0_421"
+        MAVEN_HOME = "/usr/local/maven/apache-maven-3.8.9"
+        MAVEN_CMD = "${MAVEN_HOME}/bin/mvn"
+        NODE_HOME = "/usr/local/node/14.4.0/bin"
+        PATH = "${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${NODE_HOME}:/usr/bin:/bin:/usr/local/bin"
+        LOCAL_REPO_PATH = "/home/jenkins/.m2/repository"
+        // 中间件地址（已修正Redis拼写）
+        NACOS_INNER_ADDR = "ry-cloud-nacos-service:8848"
+        MYSQL_ADDR = "ry-cloud-mysql-service:3306"
+        MYSQL_USER = "root"
+        MYSQL_PWD = "123456"
+        REDIS_ADDR = "ry-cloud-redis-service:6379"
+        REDIS_PWD = "123456"
+        // 构建路径配置
+        JENKINS_WORKSPACE = "${WORKSPACE}"
+        NODE_OPTIONS = "--max_old_space_size=1024"
+        GATEWAY_SERVICE_NAME = "ruoyi-gateway.${K8S_NAMESPACE}.svc.cluster.local"
+        // 镜像名称
+        GATEWAY_IMAGE = "${DOCKER_REGISTRY}/${HARBOR_PROJECT}/ruoyi-gateway:${BUILD_TAG}"
+        AUTH_IMAGE = "${DOCKER_REGISTRY}/${HARBOR_PROJECT}/ruoyi-auth:${BUILD_TAG}"
+        SYSTEM_IMAGE = "${DOCKER_REGISTRY}/${HARBOR_PROJECT}/ruoyi-system:${BUILD_TAG}"
+        FILE_IMAGE = "${DOCKER_REGISTRY}/${HARBOR_PROJECT}/ruoyi-file:${BUILD_TAG}"
+        GEN_IMAGE = "${DOCKER_REGISTRY}/${HARBOR_PROJECT}/ruoyi-gen:${BUILD_TAG}"
+        JOB_IMAGE = "${DOCKER_REGISTRY}/${HARBOR_PROJECT}/ruoyi-job:${BUILD_TAG}"
+        MONITOR_IMAGE = "${DOCKER_REGISTRY}/${HARBOR_PROJECT}/ruoyi-monitor:${BUILD_TAG}"
+        UI_IMAGE = "${DOCKER_REGISTRY}/${HARBOR_PROJECT}/ruoyi-ui:${BUILD_TAG}"
+        // 基础镜像
+        OPENJDK_IMAGE = "${DOCKER_REGISTRY}/${HARBOR_PROJECT}/openjdk:8-jre-slim"
+        BUSYBOX_IMAGE = "${DOCKER_REGISTRY}/${HARBOR_PROJECT}/busybox:1.35"
+        NGINX_IMAGE = "${DOCKER_REGISTRY}/${HARBOR_PROJECT}/nginx:alpine"
+        // 端口配置
+        UI_NODE_PORT = "30080"       
+        MONITOR_NODE_PORT = "9100"
+
+    }
+
+    stages {
+        stage('1. 后端构建') {
+            steps {
+                sh '''
+                    cd ${JENKINS_WORKSPACE}
+                    # 清理并构建后端项目（跳过测试加速构建）
+                    ${MAVEN_CMD} clean install -DskipTests -U
+                    # 验证jar包生成
+                    echo "===== 生成的 jar 包列表 ====="
+                    find . -name "*.jar" -path "*/target/*" | grep -E "(file|gen|job|monitor|system|auth|gateway)"
+                '''
+            }
+        }
+
+        stage('2. 前端打包') {
+            steps {
+                sh '''
+                    cd ${JENKINS_WORKSPACE}/ruoyi-ui
+                    # 配置npm镜像加速
+                    npm config set registry https://registry.npmmirror.com/
+                    npm cache clean --force
+                    # 安装依赖并打包
+                    npm install --no-audit --no-fund --legacy-peer-deps
+                    NODE_OPTIONS="--max_old_space_size=2048" npm run build:prod
+                '''
+                script {
+                    // 验证前端打包结果
+                    if (!fileExists("${JENKINS_WORKSPACE}/ruoyi-ui/dist/index.html")) {
+                        error "前端打包失败！未生成dist/index.html文件"
+                    }
+                    echo "✅ 前端打包成功，dist目录文件列表："
+                    sh "ls -lh ${JENKINS_WORKSPACE}/ruoyi-ui/dist/"
+                }
+            }
+        }
+
+        stage('3. 构建并推送镜像') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: "${HARBOR_CRED_ID}", passwordVariable: 'HARBOR_PWD', usernameVariable: 'HARBOR_USER')]) {
+                    // 登录Harbor
+                    sh "echo \"\${HARBOR_PWD}\" | docker login ${HARBOR_AUTH_ADDR} -u \${HARBOR_USER} --password-stdin"
+
+                    // 构建网关镜像
+                    dir("ruoyi-gateway") {
+                        writeFile file: 'Dockerfile', text: """
+FROM  ${OPENJDK_IMAGE}
+RUN mkdir -p /opt/project/ruoyi/logs/ruoyi-gateway
+WORKDIR /opt/project/ruoyi
+COPY ./target/ruoyi-gateway.jar ruoyi-gateway.jar
+EXPOSE 8080
+# 前台运行，避免容器退出
+CMD ["java", "-jar", "/opt/project/ruoyi/ruoyi-gateway.jar", "--spring.profiles.active=k8s", "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-gateway"]
+                        """.stripIndent()
+                        sh "docker build -t ${GATEWAY_IMAGE} . && docker push ${GATEWAY_IMAGE}"
+                    }
+
+                    // 构建认证服务镜像
+                    dir("ruoyi-auth") {
+                        writeFile file: 'Dockerfile', text: """
+FROM  ${OPENJDK_IMAGE}
+RUN mkdir -p /opt/project/ruoyi/logs/ruoyi-auth
+WORKDIR /opt/project/ruoyi
+COPY ./target/ruoyi-auth.jar ruoyi-auth.jar
+EXPOSE 9200
+CMD ["java", "-jar", "/opt/project/ruoyi/ruoyi-auth.jar", "--spring.profiles.active=k8s", "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-auth"]
+                        """.stripIndent()
+                        sh "docker build -t ${AUTH_IMAGE} . && docker push ${AUTH_IMAGE}"
+                    }
+
+                    // 构建系统服务镜像
+                    dir("ruoyi-modules/ruoyi-system") {
+                        writeFile file: 'Dockerfile', text: """
+FROM  ${OPENJDK_IMAGE}
+RUN mkdir -p /opt/project/ruoyi/logs/ruoyi-sys
+WORKDIR /opt/project/ruoyi
+COPY ./target/ruoyi-modules-system.jar ruoyi-modules-system.jar
+EXPOSE 9201
+CMD ["java", "-jar", "/opt/project/ruoyi/ruoyi-modules-system.jar", "--spring.profiles.active=k8s", "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-sys"]
+                        """.stripIndent()
+                        sh "docker build -t ${SYSTEM_IMAGE} . && docker push ${SYSTEM_IMAGE}"
+                    }
+
+                    // 构建文件服务镜像
+                    dir("ruoyi-modules/ruoyi-file") {
+                        writeFile file: 'Dockerfile', text: """
+FROM  ${OPENJDK_IMAGE}
+RUN mkdir -p /opt/project/ruoyi/logs/ruoyi-file
+WORKDIR /opt/project/ruoyi
+COPY ./target/ruoyi-modules-file.jar ruoyi-modules-file.jar
+EXPOSE 9300
+CMD ["java", "-jar", "/opt/project/ruoyi/ruoyi-modules-file.jar", "--spring.profiles.active=k8s", "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-file"]
+                        """.stripIndent()
+                        sh "docker build -t ${FILE_IMAGE} . && docker push ${FILE_IMAGE}"
+                    }
+
+                    // 构建代码生成服务镜像
+                    dir("ruoyi-modules/ruoyi-gen") {
+                        writeFile file: 'Dockerfile', text: """
+FROM  ${OPENJDK_IMAGE}
+RUN mkdir -p /opt/project/ruoyi/logs/ruoyi-gen
+WORKDIR /opt/project/ruoyi
+COPY ./target/ruoyi-modules-gen.jar ruoyi-modules-gen.jar
+EXPOSE 9202
+CMD ["java", "-jar", "/opt/project/ruoyi/ruoyi-modules-gen.jar", "--spring.profiles.active=k8s", "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-gen"]
+                        """.stripIndent()
+                        sh "docker build -t ${GEN_IMAGE} . && docker push ${GEN_IMAGE}"
+                    }
+
+                    // 构建定时任务服务镜像
+                    dir("ruoyi-modules/ruoyi-job") {
+                        writeFile file: 'Dockerfile', text: """
+FROM  ${OPENJDK_IMAGE}
+RUN mkdir -p /opt/project/ruoyi/logs/ruoyi-job
+WORKDIR /opt/project/ruoyi
+COPY ./target/ruoyi-modules-job.jar ruoyi-modules-job.jar
+EXPOSE 9203
+CMD ["java", "-jar", "/opt/project/ruoyi/ruoyi-modules-job.jar", "--spring.profiles.active=k8s", "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-job"]
+                        """.stripIndent()
+                        sh "docker build -t ${JOB_IMAGE} . && docker push ${JOB_IMAGE}"
+                    }
+
+                    // 构建监控服务镜像
+                    dir("ruoyi-visual/ruoyi-monitor") {
+                        writeFile file: 'Dockerfile', text: """
+FROM  ${OPENJDK_IMAGE}
+RUN mkdir -p /opt/project/ruoyi/logs/ruoyi-monitor
+WORKDIR /opt/project/ruoyi
+COPY ./target/ruoyi-visual-monitor.jar ruoyi-visual-monitor.jar
+EXPOSE 9100
+CMD ["java", "-jar", "/opt/project/ruoyi/ruoyi-visual-monitor.jar", "--spring.profiles.active=k8s", "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-monitor"]
+                        """.stripIndent()
+                        sh "docker build -t ${MONITOR_IMAGE} . && docker push ${MONITOR_IMAGE}"
+                    }
+
+                    // 构建前端镜像
+                    dir("ruoyi-ui") {
+                        writeFile file: 'Dockerfile', text: """
+FROM ${NGINX_IMAGE}
+RUN mkdir -p /opt/project/ruoyi/ruoyi-front-code
+COPY dist /opt/project/ruoyi/ruoyi-front-code
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+                        """.stripIndent()
+                        sh """
+                            docker build -t ${UI_IMAGE} . 
+                            if [ \$? -eq 0 ]; then
+                                echo "✅ 前端镜像构建成功"
+                                docker push ${UI_IMAGE}
+                            else
+                                echo "❌ 前端镜像构建失败"
+                                exit 1
+                            fi
+                        """
+                    }
+
+                    // 退出Harbor登录
+                    sh "docker logout ${HARBOR_AUTH_ADDR}"
+                }
+            }
+        }
+```
+
+### 6.2.1 运行统一流水线并验证
+
+1. 登录Jenkins，点击「ruoyi-cloud」→「立即构建」，启动前后端统一流水线
+
+2. 点击构建记录（如#1），点击「Console Output」，查看构建日志，确保每个阶段（拉取代码、并行构建前后端、并行构建镜像、并行推送镜像、清理镜像）无报错，最终显示「前后端统一流水线构建成功！」
+
+![流水线构建日志](images/image-20260729033705994.png)
+
+3. 验证Harbor镜像：登录Harbor（http://192.168.44.30），进入ruoyi-cloud项目，查看是否同时存在前端和后端的镜像
+
+![Harbor镜像列表](images/image-20260729033804580.png)
+
+
+
+# **7. K8s集群部署ruoyi-cloud项目**
+
+核心目标：将Harbor中的前端、后端镜像部署到K8s集群，通过ConfigMap配置环境变量，通过Deployment管理容器，通过Service暴露服务，实现项目容器化上线。
+
+说明：所有K8s部署命令均在Master节点（192.168.44.20）执行，所有配置文件统一放在/root/ruoyi-cloud-k8s目录下，便于管理。
+
+## **7.1 前置准备（Master节点执行）**
+
+1. 创建部署目录，用于存放K8s配置文件：mkdir -p /root/ruoyi-cloud-k8s
+cd /root/ruoyi-cloud-k8s
+
+2. 配置K8s拉取Harbor私有镜像的密钥（避免拉取镜像时权限不足）：
+    # 创建密钥（name自定义，如harbor-secret；server为Harbor地址；username和password为Harbor账号密码）
+    kubectl create secret docker-registry harbor-secret --docker-server=192.168.44.30 --docker-username=admin --docker-password=123456
+    \# 查看密钥是否创建成功
+    kubectl get secrets
+
+![创建镜像拉取密钥](images/image-20260729034205035.png)
+
+## **7.2 中间件服务部署（ruoyi-cloud-backend）**
+
+### **7.2.1 创建ConfigMap（配置环境变量，统一管理配置）**
+
+1. 创建nginx.conf文件：
+
+   ```shell
+   server {
+       listen       80;
+       server_name  localhost;
+   
+       location / {
+           # 镜像中存放前端静态文件的位置
+           root   /opt/project/ruoyi/ruoyi-front-code;
+           try_files $uri $uri/ /index.html;
+           index  index.html index.htm;
+       }
+   
+       location /prod-api/ {
+           proxy_set_header Host $http_host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header REMOTE-HOST $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           # 转发到后端网关服务
+           proxy_pass http://ry-cloud-gateway-service:8080;
+           # 新增：适配K8s的超时配置
+           proxy_connect_timeout 10s;
+           proxy_read_timeout 30s;
+       }
+   
+       # 避免actuator暴露
+       location ~ /actuator {
+           return 403;
+       }
+   
+       error_page   500 502 503 504  /50x.html;
+       location = /50x.html {
+           root   /usr/share/nginx/html;  # 修正为Nginx内置错误页路径
+       }
+   }
+   
+   ```
+
+   ![Nginx配置文件预览](images/image-20260729034255587.png)
+
+### **7.2.2 创建Deployment（部署后端容器）**
+
+
+
+![后端Deployment资源](images/image-20260729034943705.png)
+
+
+
+### **7.2.3 创建Service（暴露后端服务，供前端访问）**
+
+![Service资源配置](images/image-20260729035032696.png)
+
+
+## 7.3 服务部署
+
+```shell
+stage('4. 部署到K8s集群') {
+            steps {
+                sh """
+                    export KUBECONFIG=/root/.kube/config
+                    # ===================== 优化1：精准清理业务服务资源（忽略中间件） =====================
+                    # 只删除业务服务相关资源，保留minio/mysql/nacos等中间件
+                    DEPLOYS="ruoyi-cloud-gateway-deployment ruoyi-cloud-auth-deployment ruoyi-cloud-sys-deployment ruoyi-cloud-file-deployment ruoyi-cloud-gen-deployment ruoyi-cloud-job-deployment ruoyi-cloud-monitor-deployment ry-cloud-ui-deployment"
+                    SVCS="ry-cloud-gateway-service ruoyi-cloud-auth-service ry-cloud-sys-service ry-cloud-file-service ry-cloud-gen-service ry-cloud-job-service ry-cloud-monitor-service ry-cloud-ui-service"
+                    CONFIGMAPS="ruoyi-cloud-ui-config-map"
+                    
+                    # 1. 强制删除Deployment（级联删除Pod，跳过优雅等待）
+                    for deploy in \$DEPLOYS; do
+                        kubectl delete deploy \$deploy -n ${K8S_NAMESPACE} --grace-period=0 --force --ignore-not-found=true
+                    done
+                    
+                    # 2. 删除Service
+                    for svc in \$SVCS; do
+                        kubectl delete svc \$svc -n ${K8S_NAMESPACE} --ignore-not-found=true
+                    done
+                    
+                    # 3. 删除ConfigMap
+                    for cm in \$CONFIGMAPS; do
+                        kubectl delete configmap \$cm -n ${K8S_NAMESPACE} --ignore-not-found=true
+                    done
+                    
+                    # 4. 等待业务服务Pod被删除（最多等60秒）
+                    kubectl wait --for=delete pod -n ${K8S_NAMESPACE} -l 'app in (ruoyi-cloud-gateway-pod,ruoyi-cloud-auth-pod,ry-cloud-ui-pod)' --timeout=60s || echo "⚠️ 部分业务Pod删除超时，可忽略（中间件Pod无需删除）"
+                    
+                    # 5. 验证删除结果（只检查业务服务）
+                    echo "===== 清理后业务服务资源 ====="
+                    kubectl get deploy,svc,configmap -n ${K8S_NAMESPACE} | grep -E 'ruoyi-cloud-gateway|ruoyi-cloud-auth|ry-cloud-ui' || echo "✅ 所有业务服务资源已彻底删除"
+                    sleep 5  # 缩短等待时间
+                    
+                    # ===================== 优化2：修复kubectl taint命令 =====================
+                    # 移除--ignore-not-found参数，并用|| true确保命令失败不终止流水线
+                    kubectl taint nodes --all node-role.kubernetes.io/control-plane- || true
+                    
+                    # ===================== 新增：创建nginx ConfigMap（避免部署时缺失） =====================
+                    if [ ! -f "${NGINX_CONF_LOCAL_PATH}" ]; then
+                        echo "⚠️  nginx配置文件不存在，自动创建基础配置"
+                        mkdir -p /root/nginx
+                        cat > ${NGINX_CONF_LOCAL_PATH} << 'EOF'
+server {
+    listen 80;
+    server_name localhost;
+    root /opt/project/ruoyi/ruoyi-front-code;
+    index index.html index.htm;
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+    location /prod-api/ {
+        proxy_pass http://ry-cloud-gateway-service:8080/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+}
+EOF
+                    fi
+                    kubectl delete configmap ruoyi-cloud-ui-config-map -n ${K8S_NAMESPACE} --ignore-not-found=true
+                    kubectl create configmap ruoyi-cloud-ui-config-map -n ${K8S_NAMESPACE} --from-file=nginx.conf=${NGINX_CONF_LOCAL_PATH}
+                """
+
+                // 部署网关服务（探针延迟优化）
+                dir("ruoyi-gateway") {
+                    writeFile file: 'deployment.yml', text: """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ruoyi-cloud-gateway-deployment
+  namespace: ${K8S_NAMESPACE}
+  labels:
+    app: ruoyi-cloud-gateway-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ruoyi-cloud-gateway-pod
+  template:
+    metadata:
+      labels:
+        app: ruoyi-cloud-gateway-pod
+    spec:
+      containers:
+        - name: ruoyi-cloud-gateway-container
+          image: ${GATEWAY_IMAGE}
+          # 资源限制（适配8G内存服务器）
+          resources:
+            limits:
+              memory: "1Gi"  # 提升内存限制，避免OOM
+              cpu: "500m"
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          # 启动命令
+          command: ["java"]
+          args: [
+            "-jar", "/opt/project/ruoyi/ruoyi-gateway.jar",
+            "--spring.profiles.active=k8s",
+            "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-gateway"
+          ]
+          # 存活探针（核心修改：延长初始延迟到180秒）
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 180
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5  # 增加失败阈值，避免偶发超时
+          # 就绪探针（核心修改：延长初始延迟到120秒）
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      imagePullSecrets:
+        - name: harbor-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ry-cloud-gateway-service
+  namespace: ${K8S_NAMESPACE}
+spec:
+  selector:
+    app: ruoyi-cloud-gateway-pod
+  ports:
+    - port: 8080
+      targetPort: 8080
+                    """.stripIndent()
+                    sh "kubectl apply -f deployment.yml"
+                }
+
+                // 部署认证服务（核心修复：Service端口 + 探针延迟）
+                dir("ruoyi-auth") {
+                    writeFile file: 'deployment.yml', text: """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ruoyi-cloud-auth-deployment
+  namespace: ${K8S_NAMESPACE}
+  labels:
+    app: ruoyi-cloud-auth-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ruoyi-cloud-auth-pod
+  template:
+    metadata:
+      labels:
+        app: ruoyi-cloud-auth-pod
+    spec:
+      containers:
+        - name: ruoyi-cloud-auth-container
+          image: ${AUTH_IMAGE}
+          resources:
+            limits:
+              memory: "1Gi"  # 提升内存限制
+              cpu: "500m"
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9200
+          command: ["java"]
+          args: [
+            "-Dspring.component-scan.base-packages=com.ruoyi",
+            "-jar", "/opt/project/ruoyi/ruoyi-auth.jar",
+            "--spring.profiles.active=k8s",
+            "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-auth"
+          ]
+          # 存活探针（核心修改：延长到200秒）
+          livenessProbe:
+            tcpSocket:
+              port: 9200
+            initialDelaySeconds: 200
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          # 就绪探针（核心修改：延长到150秒）
+          readinessProbe:
+            tcpSocket:
+              port: 9200
+            initialDelaySeconds: 150
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      imagePullSecrets:
+        - name: harbor-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ruoyi-cloud-auth-service
+  namespace: ${K8S_NAMESPACE}
+spec:
+  selector:
+    app: ruoyi-cloud-auth-pod
+  ports:
+    - port: 8080  # 核心修复：对外暴露8080端口（网关默认访问）
+      targetPort: 9200  # 转发到容器内的9200端口
+                    """.stripIndent()
+                    sh "kubectl apply -f deployment.yml"
+                }
+
+                // 部署系统服务（探针延迟优化）
+                dir("ruoyi-modules/ruoyi-system") {
+                    writeFile file: 'deployment.yml', text: """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ruoyi-cloud-sys-deployment
+  namespace: ${K8S_NAMESPACE}
+  labels:
+    app: ruoyi-cloud-sys-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ruoyi-cloud-sys-pod
+  template:
+    metadata:
+      labels:
+        app: ruoyi-cloud-sys-pod
+    spec:
+      containers:
+        - name: ruoyi-cloud-sys-container
+          image: ${SYSTEM_IMAGE}
+          resources:
+            limits:
+              memory: "1Gi"  # 提升内存限制
+              cpu: "500m"
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9201
+          command: ["java"]
+          args: [
+            "-jar", "/opt/project/ruoyi/ruoyi-modules-system.jar",
+            "--spring.profiles.active=k8s",
+            "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-sys"
+          ]
+          # 存活探针（核心修改：延长到200秒）
+          livenessProbe:
+            tcpSocket:
+              port: 9201
+            initialDelaySeconds: 200
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          # 就绪探针（核心修改：延长到150秒）
+          readinessProbe:
+            tcpSocket:
+              port: 9201
+            initialDelaySeconds: 150
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      imagePullSecrets:
+        - name: harbor-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ry-cloud-sys-service
+  namespace: ${K8S_NAMESPACE}
+spec:
+  selector:
+    app: ruoyi-cloud-sys-pod
+  ports:
+    - port: 8080  # 核心修复：对外暴露8080端口
+      targetPort: 9201
+                    """.stripIndent()
+                    sh "kubectl apply -f deployment.yml"
+                }
+
+                // 部署文件服务（探针延迟优化）
+                dir("ruoyi-modules/ruoyi-file") {
+                    writeFile file: 'deployment.yml', text: """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ruoyi-cloud-file-deployment
+  namespace: ${K8S_NAMESPACE}
+  labels:
+    app: ruoyi-cloud-file-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ruoyi-cloud-file-pod
+  template:
+    metadata:
+      labels:
+        app: ruoyi-cloud-file-pod
+    spec:
+      containers:
+        - name: ruoyi-cloud-file-container
+          image: ${FILE_IMAGE}
+          resources:
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9300
+          command: ["java"]
+          args: [
+            "-jar", "/opt/project/ruoyi/ruoyi-modules-file.jar",
+            "--spring.profiles.active=k8s",
+            "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-file"
+          ]
+          livenessProbe:
+            tcpSocket:
+              port: 9300
+            initialDelaySeconds: 180
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: 9300
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      imagePullSecrets:
+        - name: harbor-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ry-cloud-file-service
+  namespace: ${K8S_NAMESPACE}
+spec:
+  selector:
+    app: ruoyi-cloud-file-pod
+  ports:
+    - port: 8080
+      targetPort: 9300
+                    """.stripIndent()
+                    sh "kubectl apply -f deployment.yml"
+                }
+
+                // 部署代码生成服务（探针延迟优化）
+                dir("ruoyi-modules/ruoyi-gen") {
+                    writeFile file: 'deployment.yml', text: """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ruoyi-cloud-gen-deployment
+  namespace: ${K8S_NAMESPACE}
+  labels:
+    app: ruoyi-cloud-gen-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ruoyi-cloud-gen-pod
+  template:
+    metadata:
+      labels:
+        app: ruoyi-cloud-gen-pod
+    spec:
+      containers:
+        - name: ruoyi-cloud-gen-container
+          image: ${GEN_IMAGE}
+          resources:
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9202
+          command: ["java"]
+          args: [
+            "-jar", "/opt/project/ruoyi/ruoyi-modules-gen.jar",
+            "--spring.profiles.active=k8s",
+            "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-gen"
+          ]
+          livenessProbe:
+            tcpSocket:
+              port: 9202
+            initialDelaySeconds: 180
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: 9202
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      imagePullSecrets:
+        - name: harbor-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ry-cloud-gen-service
+  namespace: ${K8S_NAMESPACE}
+spec:
+  selector:
+    app: ruoyi-cloud-gen-pod
+  ports:
+    - port: 8080
+      targetPort: 9202
+                    """.stripIndent()
+                    sh "kubectl apply -f deployment.yml"
+                }
+
+                // 部署定时任务服务（探针延迟优化）
+                dir("ruoyi-modules/ruoyi-job") {
+                    writeFile file: 'deployment.yml', text: """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ruoyi-cloud-job-deployment
+  namespace: ${K8S_NAMESPACE}
+  labels:
+    app: ruoyi-cloud-job-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ruoyi-cloud-job-pod
+  template:
+    metadata:
+      labels:
+        app: ruoyi-cloud-job-pod
+    spec:
+      containers:
+        - name: ruoyi-cloud-job-container
+          image: ${JOB_IMAGE}
+          resources:
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9203
+          command: ["java"]
+          args: [
+            "-jar", "/opt/project/ruoyi/ruoyi-modules-job.jar",
+            "--spring.profiles.active=k8s",
+            "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-job"
+          ]
+          livenessProbe:
+            tcpSocket:
+              port: 9203
+            initialDelaySeconds: 180
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: 9203
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      imagePullSecrets:
+        - name: harbor-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ry-cloud-job-service
+  namespace: ${K8S_NAMESPACE}
+spec:
+  selector:
+    app: ruoyi-cloud-job-pod
+  ports:
+    - port: 8080
+      targetPort: 9203
+                    """.stripIndent()
+                    sh "kubectl apply -f deployment.yml"
+                }
+
+                // 部署监控服务（探针延迟优化）
+                dir("ruoyi-visual/ruoyi-monitor") {
+                    writeFile file: 'deployment.yml', text: """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ruoyi-cloud-monitor-deployment
+  namespace: ${K8S_NAMESPACE}
+  labels:
+    app: ruoyi-cloud-monitor-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ruoyi-cloud-monitor-pod
+  template:
+    metadata:
+      labels:
+        app: ruoyi-cloud-monitor-pod
+    spec:
+      containers:
+        - name: ruoyi-cloud-monitor-container
+          image: ${MONITOR_IMAGE}
+          resources:
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9100
+              name: port-9100
+          command: ["java"]
+          args: [
+            "-jar", "/opt/project/ruoyi/ruoyi-visual-monitor.jar",
+            "--spring.profiles.active=k8s",
+            "-Dlogging.path=/opt/project/ruoyi/logs/ruoyi-monitor"
+          ]
+          livenessProbe:
+            tcpSocket:
+              port: 9100
+            initialDelaySeconds: 180
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: 9100
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      imagePullSecrets:
+        - name: harbor-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ry-cloud-monitor-service
+  namespace: ${K8S_NAMESPACE}
+spec:
+  type: NodePort
+  selector:
+    app: ruoyi-cloud-monitor-pod
+  ports:
+    - name: port-9100
+      port: 9100
+      targetPort: 9100
+      nodePort: ${MONITOR_NODE_PORT}
+                    """.stripIndent()
+                    sh "kubectl apply -f deployment.yml"
+                }
+
+                // 部署前端服务（优化初始化容器等待时间）
+                dir("ruoyi-ui") {
+                    writeFile file: 'deployment.yml', text: """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ry-cloud-ui-deployment
+  namespace: ${K8S_NAMESPACE}
+  labels:
+    app: ry-cloud-ui-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ry-cloud-ui-pod
+  template:
+    metadata:
+      labels:
+        app: ry-cloud-ui-pod
+    spec:
+      # 初始化容器：等待核心服务就绪（延长超时时间）
+      initContainers:
+        - name: wait-for-all-core-services
+          image: ${BUSYBOX_IMAGE}
+          command:
+            - sh
+            - -c
+            - |
+              echo "=== 等待所有核心服务端口就绪 ==="
+              # 延长超时时间，每个服务最多等5分钟
+              until nc -z -w 10 ry-cloud-gateway-service 8080; do
+                echo "等待网关服务 ry-cloud-gateway-service:8080..."
+                sleep 10
+              done
+              until nc -z -w 10 ruoyi-cloud-auth-service 8080; do
+                echo "等待认证服务 ruoyi-cloud-auth-service:8080..."
+                sleep 10
+              done
+              until nc -z -w 10 ry-cloud-sys-service 8080; do
+                echo "等待系统服务 ry-cloud-sys-service:8080..."
+                sleep 10
+              done
+              echo "=== 所有核心服务就绪 ==="
+      containers:
+        - name: ruoyi-cloud-ui-container
+          image: ${UI_IMAGE}
+          resources:
+            limits:
+              memory: "256Mi"
+              cpu: "100m"
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          # 挂载nginx配置ConfigMap
+          volumeMounts:
+            - mountPath: /etc/nginx/conf.d
+              name: nginx-config
+          # 存活探针
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # 就绪探针
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+      # 配置卷
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: ruoyi-cloud-ui-config-map
+            items:
+              - key: nginx.conf
+                path: default.conf
+      imagePullSecrets:
+        - name: harbor-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ry-cloud-ui-service
+  namespace: ${K8S_NAMESPACE}
+spec:
+  type: NodePort
+  selector:
+    app: ry-cloud-ui-pod
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: ${UI_NODE_PORT}
+                    """.stripIndent()
+                    sh "kubectl apply -f deployment.yml"
+                }
+
+                // 检查部署状态（容错逻辑：超时不终止）
+                sh """
+                    echo "===== 所有Pod状态（${K8S_NAMESPACE}命名空间） ====="
+                    kubectl get pods -n ${K8S_NAMESPACE} | grep -E 'ruoyi-cloud|ry-cloud-ui'
+                    echo "===== 所有服务状态（包含NodePort） ====="
+                    kubectl get svc -n ${K8S_NAMESPACE} | grep -E 'ruoyi-cloud|ry-cloud-ui'
+                    # 等待前端Pod就绪（超时仅提示，不失败）
+                    kubectl wait --for=condition=ready pod -l app=ry-cloud-ui-pod -n ${K8S_NAMESPACE} --timeout=1800s || echo "⚠️ 前端Pod启动超时，可手动检查状态"
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ 全部部署成功！"
+            echo "前端访问地址：http://${K8S_MASTER}:${UI_NODE_PORT}"
+            echo "监控服务地址：http://${K8S_MASTER}:${MONITOR_NODE_PORT}"
+            echo "测试登录接口：curl -X POST http://${K8S_MASTER}:${UI_NODE_PORT}/prod-api/auth/login -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":\"123456\"}'"
+        }
+        failure {
+            echo "❌ 部署失败！请查看以下日志排查问题："
+            sh """
+                kubectl get pods -n ${K8S_NAMESPACE} | grep -E 'ruoyi-cloud|ry-cloud-ui' || true
+                kubectl logs -n ${K8S_NAMESPACE} -l app=ruoyi-cloud-auth-pod --tail=200 || true
+                kubectl logs -n ${K8S_NAMESPACE} -l app=ry-cloud-ui-pod -c wait-for-all-core-services --tail=200 || true
+                kubectl describe pod -n ${K8S_NAMESPACE} -l app=ruoyi-cloud-auth-pod || true
+            """
+        }
+    }
+}
+```
+
+![部署执行日志](images/image-20260729035127279.png)
+
+## **7.4 部署验证（检查所有资源状态）**
+
+2. 确保所有资源状态正常：ConfigMap存在、Deployment READY 1/1、Pod Running、Service正常暴露端口，后端Pod日志无报错。
+
+![Pod与服务列表](images/image-20260729035143502.png)
+
+**补充说明**：若Pod状态为Pending，可能是镜像拉取失败（检查密钥、Harbor地址）；若为CrashLoopBackOff，查看Pod日志排查配置问题（如数据库、Nacos连接失败）。
+
+# 8.0效果展示
+
+ 前端登录：![前端登录页面](images/image-20260729035226954.png)
+
+页面展示：
+
+![系统管理页面1](images/image-20260729035252805.png)
+
+![系统管理页面2](images/image-20260729035329468.png)
+
+minio展示：
+
+![MinIO管理页面](images/image-20260729035605129.png)
+
+监控：
+
+![监控面板展示](images/image-20260729035622191.png)
+
+
+
+nacos展示：
+
+![Nacos控制台页面](images/image-20260729035647545.png)
+
+# 9. 生产级高可用架构升级
+
+本章从应用服务、中间件、入口网络、数据容灾四个维度消除单点故障，将单副本测试环境升级为生产级高可用架构，保障业务连续性。
+
+## 9.1 应用服务层高可用
+
+### 9.1.1 多副本与 Pod 反亲和部署
+
+核心服务（网关、认证、系统模块）配置多副本，通过反亲和策略强制分散到不同物理节点，避免单节点故障导致核心链路中断。
+
+- **基础版（低配置环境适用）**：网关、认证、系统服务 2 副本，其余非核心服务 1 副本
+- **进阶版**：所有业务服务 ≥2 副本，强制节点反亲和
+
+Deployment 配置示例（以网关为例）：
+
+```yaml
+spec:
+  replicas: 2
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app: ruoyi-cloud-gateway
+        topologyKey: kubernetes.io/hostname
+```
+
+### 9.1.2 Pod 干扰预算（PDB）
+
+为核心服务配置 `PodDisruptionBudget`，确保节点维护、集群驱逐等运维操作期间，核心服务最小可用副本数不低于阈值，避免人为操作导致业务中断。
+
+```yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ruoyi-gateway-pdb
+  namespace: default
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: ruoyi-cloud-gateway-pod
+```
+
+### 9.1.3 水平自动扩缩容（HPA）
+
+基于 CPU / 内存使用率配置自动扩缩容，应对流量突发波动；网关层可后续扩展基于 QPS 的自定义指标扩缩容。
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ruoyi-gateway-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ruoyi-cloud-gateway-deployment
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+```
+
+### 9.1.4 优雅启停与无损发布
+
+优化滚动更新策略与探针参数，配合 Nacos 服务优雅上下线，确保版本发布、Pod 重建过程中业务请求无中断、无报错。
+
+```yaml
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  terminationGracePeriodSeconds: 60
+  lifecycle:
+    preStop:
+      exec:
+        command: ["/bin/sh", "-c", "sleep 20 && curl -X POST http://127.0.0.1:8080/actuator/shutdown"]
+```
+
+## 9.2 核心中间件高可用
+
+### 9.2.1 Nacos 注册配置中心集群化
+
+Nacos 为微服务核心依赖，单实例故障会导致全链路服务注册发现失效，生产环境升级为 3 节点集群模式。
+
+- 集群模式：3 节点 Raft 集群，数据持久化到外置 MySQL
+- 健康检查：配置存活 / 就绪探针，故障节点自动剔除
+- 配置备份：每日自动导出 Nacos 配置快照，支持一键回滚
+
+### 9.2.2 MySQL 主从复制与读写分离
+
+数据库为核心单点，生产环境升级为**一主一从 / 一主两从**架构，基于 Binlog 主从同步，配合读写分离分担查询压力。
+
+- 主库：负责写请求与核心读请求
+- 从库：负责报表、查询类非核心读请求
+- 自动切换：可配合 MHA/Keepalived 实现主库故障自动切换
+
+### 9.2.3 Redis 哨兵模式高可用
+
+缓存服务升级为 **Redis Sentinel（3 节点哨兵 + 1 主 1 从）**，哨兵集群实时监控主从节点状态，主节点故障时自动选举新主节点，避免缓存单点故障引发业务雪崩。
+
+- 持久化：开启 RDB + AOF 混合持久化
+- 缓存兜底：核心接口配置本地二级缓存，应对 Redis 集群短暂不可用场景
+
+## 9.3 入口与网络层高可用
+
+### 9.3.1 Ingress Nginx 多副本部署
+
+Ingress 控制器配置 2~3 副本，配合 Pod 反亲和性分散到不同节点，避免入口层单点故障。
+
+- 云环境：配合云厂商负载均衡（SLB/CLB）挂载所有 Ingress 节点
+- 自建集群：配合 Keepalived + VIP 实现入口漂移
+
+### 9.3.2 网关层限流与熔断降级
+
+基于 Spring Cloud Gateway + Sentinel 实现网关层流量治理，防范流量突增与依赖故障雪崩。
+
+- 限流：按 IP、接口、用户维度配置限流规则，保护后端服务
+- 熔断：下游服务故障时自动熔断，返回降级兜底响应，避免故障传导
+- 热点参数限流：针对登录、查询等热点接口做专项限流
+
+### 9.3.3 VIP 漂移方案（自建集群适用）
+
+在 Ingress 节点部署 Keepalived，绑定虚拟 VIP，单 Ingress 节点故障时 VIP 自动漂移到健康节点，实现入口层无感知故障转移。
+
+## 9.4 数据备份与容灾指标
+
+### 9.4.1 核心数据备份策略
+
+| 数据类型       | 备份方式                     | 备份频率                | 保留周期 |
+| -------------- | ---------------------------- | ----------------------- | -------- |
+| MySQL 业务数据 | mysqldump 全量 + Binlog 增量 | 每日全量 / 每小时增量   | 30 天    |
+| Redis 缓存数据 | RDB 快照备份                 | 每日一次                | 7 天     |
+| Nacos 配置数据 | 配置快照导出                 | 每日一次 + 变更实时备份 | 90 天    |
+| 用户上传文件   | 存储快照 + 异地备份          | 每日增量                | 90 天    |
+
+### 9.4.2 容灾验收指标
+
+- **RTO（恢复时间目标）**：核心业务故障恢复时间 ≤ 30 分钟
+- **RPO（恢复点目标）**：数据丢失量 ≤ 1 小时
+- **月度可用性**：核心业务 SLA ≥ 99.95%
+
+------
+
+# 10. 全链路可观测性与监控告警体系
+
+本章构建设施层、中间件层、业务层三层监控体系，配套统一日志采集与分级告警，实现故障提前预警、根因快速定位。
+
+## 10.1 三层监控指标体系
+
+| 监控层级   | 监控对象                   | 核心监控指标                                                 | 采集方式                           |
+| ---------- | -------------------------- | ------------------------------------------------------------ | ---------------------------------- |
+| 基础设施层 | 服务器节点、K8s 集群       | CPU / 内存 / 磁盘 / 网络使用率、节点状态、Pod 异常率、集群资源配额使用率 | Node Exporter + Kube State Metrics |
+| 中间件层   | MySQL、Redis、Nacos、MinIO | MySQL 连接数 / 慢查询 / 主从延迟、Redis 命中率 / 内存碎片率、Nacos 服务健康数、MinIO 存储使用率 | 对应官方 Exporter                  |
+| 业务应用层 | 各微服务、前端             | 接口 QPS、错误率、响应耗时（P95/P99）、JVM 堆内存 / GC 次数、线程数、服务注册健康状态 | Spring Boot Actuator + Prometheus  |
+
+> **基础版落地建议**：优先部署基础设施层 + 中间件层监控，业务层先覆盖网关、认证、系统核心服务，后续再全量铺开。
+
+## 10.2 统一日志采集方案
+
+采用 **ELK（Elasticsearch + Logstash + Kibana）** 或轻量版 **Loki + Promtail** 方案，统一采集所有节点、Pod 日志，实现全链路日志检索与故障溯源。
+
+1. 日志规范：所有 Java 服务统一日志格式，携带 TraceID，支持链路串联
+2. 日志分级：严格区分 debug/info/warn/error 四级，错误日志必须携带异常栈
+3. 留存策略：生产环境普通日志留存 30 天，错误审计日志留存 90 天
+
+## 10.3 三级告警响应机制
+
+| 告警级别 | 触发条件                                               | 通知渠道               | 响应时效        | 处理要求                           |
+| -------- | ------------------------------------------------------ | ---------------------- | --------------- | ---------------------------------- |
+| 提示级   | 磁盘使用率超 80%、非核心接口慢查询、单副本异常         | 邮件 / 内部消息        | 工作日 4 小时内 | 记录并安排窗口期处理               |
+| 警告级   | 单服务副本不可用、接口错误率超 5%、中间件主从延迟过高  | 短信 + 内部消息        | 1 小时内响应    | 立即排查，避免升级为严重故障       |
+| 严重级   | 核心服务整体不可用、数据库主库宕机、业务可用性低于 99% | 电话 + 短信 + 消息轮播 | 15 分钟内响应   | 立即启动故障应急预案，优先恢复业务 |
+
+## 10.4 监控快速接入示例
+
+通过 ServiceMonitor 接入 Spring Boot 业务指标，示例配置：
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ruoyi-gateway-monitor
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: ry-cloud-gateway-service
+  endpoints:
+  - port: 8080
+    path: /actuator/prometheus
+    interval: 15s
+```
+
+------
+
+# 11. 混沌工程与故障演练规范
+
+通过主动注入故障验证微服务架构韧性，暴露潜在风险，确保高可用能力真实可用，同时沉淀标准化故障排查 SOP。
+
+## 11.1 核心演练场景清单（微服务专属）
+
+### 基础设施类
+
+- 随机杀死 Worker 节点，验证 K8s 自动调度与服务自愈能力
+- 模拟网络分区 / 网络延迟，验证微服务注册发现与重试容错表现
+- 磁盘空间打满、CPU 资源耗尽，验证监控告警与服务降级逻辑
+
+### 应用服务类
+
+- 随机删除网关 / 认证服务 Pod，验证服务自动恢复与流量无损切换
+- 模拟服务 OOM 崩溃，验证重启机制与业务影响范围
+- 触发滚动发布异常，验证版本回滚能力与业务恢复时效
+
+### 依赖组件类
+
+- 模拟 Nacos 注册中心宕机，验证服务本地缓存与容错能力
+- 模拟 MySQL 主库宕机，验证主从切换与业务恢复时效
+- 模拟 Redis 连接中断，验证缓存降级与业务雪崩防护效果
+- 模拟 MinIO 文件存储不可用，验证文件上传下载兜底策略
+
+### 流量压力类
+
+- 模拟登录、查询等热点接口突发高并发，验证限流策略与网关承载能力
+- 模拟慢接口拖垮服务，验证熔断降级机制是否生效
+
+## 11.2 标准化演练流程
+
+1. **演练前准备**
+   - 制定详细演练方案，明确演练范围、停止条件、回滚预案
+   - 优先在测试环境执行，验证无误后再在生产环境低峰期演练
+   - 通知相关业务方，预留运维值守人员
+2. **演练中执行**
+   - 按方案逐步注入故障，实时监控业务指标与服务状态
+   - 记录故障触发时间、自动恢复时间、人工介入操作步骤、业务影响范围
+   - 出现超出预期的严重影响时，立即执行回滚，终止演练
+3. **演练后复盘**
+   - 输出完整故障演练报告，统计 MTTR、MTBF 核心指标
+   - 梳理暴露的问题与架构短板，制定优化排期
+   - 更新故障排查手册与应急预案，沉淀运维经验
+
+## 11.3 演练验收标准
+
+- 单副本故障：业务无感知，服务自动恢复，业务错误率 < 1%
+- 单节点故障：核心业务在 RTO 时间内恢复，核心数据零丢失
+- 依赖组件故障：触发降级策略，核心登录、查询功能可用，不发生雪崩效应
+- 故障触发后 1 分钟内产生对应级别告警，通知到责任人
+
+------
+
+# 12. 生产运维管理规范
+
+## 12.1 变更发布管理
+
+- 生产环境发布严格遵循「开发验证 → 测试环境验证 → 灰度放量 → 全量发布」流程
+- 灰度发布先切 10% 流量验证，观察 30 分钟无异常后逐步全量
+- 所有版本保留一键回滚能力，发布窗口优先选择业务低峰期
+- 重大变更提前报备，留存变更记录与回滚方案
+
+## 12.2 容量规划与资源治理
+
+- 每季度执行一次容量评估，结合业务增长趋势提前扩容，避免资源瓶颈
+- 严格执行 Namespace 资源配额与 LimitRange 限制，避免单业务占用过多集群资源
+- 每月清理闲置资源与过期镜像，释放存储与计算资源
+
+## 12.3 定期灾备演练要求
+
+- 每季度执行一次数据库备份恢复演练，验证备份文件真实可用
+- 每半年执行一次全链路容灾切换演练，验证完整灾备流程
+- 所有演练留存书面报告，问题点闭环跟进整改
+
+## 12.4 安全加固规范
+
+- **镜像安全**：基础镜像定期漏洞扫描，生产镜像禁止使用 latest 标签，统一走内网 Harbor 仓库
+- **配置安全**：数据库密码、Nacos 密钥等敏感信息全部通过 K8s Secret / ConfigMap 管理，禁止明文写入代码
+- **网络安全**：通过 NetworkPolicy 限制服务间访问权限，非必要端口不对外暴露
+- **权限管控**：遵循最小权限原则，生产环境操作实行双人复核机制，操作日志全程留存审计
