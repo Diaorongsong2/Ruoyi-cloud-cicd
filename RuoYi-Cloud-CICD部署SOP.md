@@ -1,3 +1,5 @@
+
+
 # 若依（RuoYi-Cloud）全流程部署操作日志
 
 **文档版本**：V1.0
@@ -63,7 +65,7 @@
 yum install -y wget vim net-tools gcc gcc-c++ make
 ```
 
-![1773825787871](C:\Users\刁荣松\AppData\Local\Temp\1773825787871.png)
+![image-20260729023746428](C:\Users\刁荣松\Desktop\images\image-20260729023746428.png)
 
 ## **2.2 Docker安装（所有节点必装）**
 
@@ -92,7 +94,7 @@ yum install -y wget vim net-tools gcc gcc-c++ make
 Docker version 20.10.16, build aa7e414
 ```
 
-![1773825904260](C:\Users\刁荣松\AppData\Local\Temp\1773825904260.png)
+![image-20260729023824573](C:\Users\刁荣松\Desktop\images\image-20260729023824573.png)
 
 
 
@@ -117,7 +119,7 @@ Docker version 20.10.16, build aa7e414
 [root@docker ~]# mvn -v
 ```
 
-![1773826236591](C:\Users\刁荣松\AppData\Local\Temp\1773826236591.png)
+![image-20260729030128358](C:\Users\刁荣松\Desktop\images\image-20260729030128358.png)
 
 ### **3.1.2 安装Node.js（14.4.0，前端构建依赖）**
 
@@ -135,12 +137,12 @@ Docker version 20.10.16, build aa7e414
 
 # 验证安装成功（输出版本信息即正常）
 [root@docker ~]# node -v
-v14.4.0
+v16.20.2
 [root@docker ~]# npm -v
-6.14.5
+8.19.4
 ```
 
-![1773826316629](C:\Users\刁荣松\AppData\Local\Temp\1773826316629.png)
+![image-20260729030158637](C:\Users\刁荣松\Desktop\images\image-20260729030158637.png)
 
 ### **3.1.3 安装Git（代码拉取依赖）**
 
@@ -172,7 +174,7 @@ git version 1.8.3.1
 
 ```
 
-![1773826610234](C:\Users\刁荣松\AppData\Local\Temp\1773826610234.png)
+![image-20260729030243745](C:\Users\刁荣松\Desktop\images\image-20260729030243745.png)
 
 ## **3.2 GitLab服务器（192.168.44.24）部署**
 
@@ -197,7 +199,7 @@ Chef Client finished, 527/1423 resources updated in 02 minutes 05 seconds
 gitlab Reconfigured!
 ```
 
-![1773826915064](C:\Users\刁荣松\AppData\Local\Temp\1773826915064.png)
+![image-20260729030534218](C:\Users\刁荣松\Desktop\images\image-20260729030534218.png)
 
 **补充说明**：GitLab初始化需要5-10分钟，启动后请等待片刻再访问网页端。
 
@@ -209,9 +211,9 @@ gitlab Reconfigured!
 
 3. 设置完成后，使用root账号密码登录GitLab
 
-![1773827431875](C:\Users\刁荣松\AppData\Local\Temp\1773827431875.png)
+![image-20260729030652306](C:\Users\刁荣松\Desktop\images\image-20260729030652306.png)
 
-![1773827500226](C:\Users\刁荣松\AppData\Local\Temp\1773827500226.png)
+![image-20260729030713537](C:\Users\刁荣松\Desktop\images\image-20260729030713537.png)
 
 ## **3.3 Jenkins服务器（192.168.44.23）部署**
 
@@ -254,7 +256,7 @@ jenkins-2.361.4-1.1.noarch.rpm
 tcp   LISTEN 0      50     *:8080     *:*    users:(("java",pid=13602,fd=8))
 ```
 
-![1773827823795](C:\Users\刁荣松\AppData\Local\Temp\1773827823795.png)
+![image-20260729030852046](C:\Users\刁荣松\Desktop\images\image-20260729030852046.png)
 
 **3.3.2 Jenkins初始化配置**
 
@@ -268,7 +270,7 @@ tcp   LISTEN 0      50     *:8080     *:*    users:(("java",pid=13602,fd=8))
 
 5. 完成初始化，进入Jenkins首页
 
-![1773827932933](C:\Users\刁荣松\AppData\Local\Temp\1773827932933.png)
+![image-20260729030930354](C:\Users\刁荣松\Desktop\images\image-20260729030930354.png)
 
 ## **3.4 Harbor服务器（192.168.44.30）部署**
 
@@ -288,7 +290,7 @@ chmod +x /usr/local/bin/docker-compose
 docker-compose --version
 ```
 
-![1773828364726](C:\Users\刁荣松\AppData\Local\Temp\1773828364726.png)
+![image-20260729031032152](C:\Users\刁荣松\Desktop\images\image-20260729031032152.png)
 
 ### **3.4.2 部署并配置Harbor**
 
@@ -314,7 +316,7 @@ vim harbor.yml
 docker-compose ps
 ```
 
-![1773828326261](C:\Users\刁荣松\AppData\Local\Temp\1773828326261.png)
+![image-20260729031203150](C:\Users\刁荣松\Desktop\images\image-20260729031203150.png)
 
 ### **3.4.3 网页端验证Harbor**
 
@@ -323,7 +325,7 @@ docker-compose ps
 2. 使用账号：admin，密码：123456登录
 3. 登录后，创建项目（命名为ruoyi-cloud，用于存储若依项目镜像
 
-![1773828495045](C:\Users\刁荣松\AppData\Local\Temp\1773828495045.png)
+![image-20260729031244317](C:\Users\刁荣松\Desktop\images\image-20260729031244317.png)
 
 ## **3.5 K8s集群验证（复用已有环境，无需重新搭建）**
 
@@ -335,9 +337,7 @@ docker-compose ps
 [root@master ~]# kubectl get nodes
 ```
 
-
-
-![1773828561886](C:\Users\刁荣松\AppData\Local\Temp\1773828561886.png)
+![image-20260729031512396](C:\Users\刁荣松\Desktop\images\image-20260729031512396.png)
 
 ### **3.5.2 核心组件状态验证（Master节点192.168.44.20执行）**
 
@@ -345,7 +345,7 @@ docker-compose ps
 [root@master ~]# kubectl get pods -n kube-system
 ```
 
-![1773828624535](C:\Users\刁荣松\AppData\Local\Temp\1773828624535.png)
+![image-20260729031544297](C:\Users\刁荣松\Desktop\images\image-20260729031544297.png)
 
 # **4. 本地ruoyi-cloud代码验证**
 
@@ -367,7 +367,7 @@ docker-compose ps
 
 4. 验证安装：打开CMD，输入java -version，输出版本信息即正常
 
-![1773829303990](C:\Users\刁荣松\AppData\Local\Temp\1773829303990.png)
+![image-20260729031618971](C:\Users\刁荣松\Desktop\images\image-20260729031618971.png)
 
 ### **4.1.2 安装Maven 3.8.6**
 
@@ -387,11 +387,11 @@ docker-compose ps
     <mirrorOf>central</mirrorOf>
     <name>阿里云公共仓库</name>
     <url>https://maven.aliyun.com/repository/public</url>
-</mirror>
+   </mirror>
 
 5. 验证安装：CMD输入mvn -v，输出版本信息即正常
 
-![1773829329274](C:\Users\刁荣松\AppData\Local\Temp\1773829329274.png)
+![image-20260729031638674](C:\Users\刁荣松\Desktop\images\image-20260729031638674.png)
 
 ### **4.1.3 安装MySQL 8.0.36 & Redis 6.2.14**
 
@@ -422,7 +422,7 @@ docker-compose ps
 git clone https://gitee.com/y_project/RuoYi-Cloud.git ruoyi-cloud
 ```
 
-![1773829582657](C:\Users\刁荣松\AppData\Local\Temp\1773829582657.png)
+![image-20260729031722081](C:\Users\刁荣松\Desktop\images\image-20260729031722081.png)
 
 ### **4.2.2 后端配置（IDEA打开项目）**
 
@@ -453,21 +453,15 @@ git clone https://gitee.com/y_project/RuoYi-Cloud.git ruoyi-cloud
 
 2. 观察控制台日志，无报错、显示“Started XxxApplication in xxx seconds”即启动成功
 
-**截图时机**：ruoyi-admin启动成功日志截图，命名「图4-14：本地-后端服务启动成功」
-
 ### **4.3.2 启动前端服务（VS Code中）**
 
 启动成功后，浏览器自动打开http://localhost:80（前端默认端口）
-
-**截图时机**：前端启动成功终端截图+浏览器访问页面截图，命名「图4-15：本地-前端服务启动成功」
 
 ### **4.3.3 核心功能验证**
 
 1. 登录：使用默认账号admin，密码admin123登录系统
 
 2. 验证功能：访问“系统管理→用户管理”，查看用户列表；点击“新增用户”，测试新增功能；访问“代码生成”，测试代码生成功能
-
-**截图时机**：1. 系统登录成功首页截图，命名「图4-16：本地-系统登录成功」；2. 用户管理页面截图，命名「图4-17：本地-核心功能验证」
 
 **补充说明**：若启动失败，优先排查配置文件（数据库、Redis、Nacos地址），确保依赖服务正常运行。
 
@@ -491,7 +485,7 @@ git clone https://gitee.com/y_project/RuoYi-Cloud.git ruoyi-cloud
 
 ￮ 点击“Create project”，完成项目创建
 
-![1773829654655](C:\Users\刁荣松\AppData\Local\Temp\1773829654655.png)
+![image-20260729032045936](C:\Users\刁荣松\Desktop\images\image-20260729032045936.png)
 
 ## **5.2 本地代码上传到GitLab**
 
@@ -518,8 +512,6 @@ git pull origin main --allow-unrelated-histories
 git push -u origin main
 ```
 
-![1773829876590](C:\Users\刁荣松\AppData\Local\Temp\1773829876590.png)
-
 ### **5.3 GitLab分支管理（规范版本控制）**
 
 1. 在GitLab项目页面，点击“Branches”，创建分支：
@@ -530,12 +522,10 @@ git push -u origin main
 
 2. 本地切换到dev分支，后续开发、修改均在dev分支进行，测试通过后再合并到main分支：
 
-​        # 本地切换到dev分支
+        # 本地切换到dev分支
 git checkout -b dev
 \# 推送dev分支到远程仓库
 git push -u origin dev
-
-![1773829998032](C:\Users\刁荣松\AppData\Local\Temp\1773829998032.png)
 
 **补充说明**：分支管理规范：main分支为生产分支，仅用于发布稳定版本；dev分支为开发分支，日常开发、代码修改均在dev分支进行，测试通过后通过GitLab合并请求（Merge Request）合并到main分支，避免直接修改main分支代码。
 
@@ -562,7 +552,7 @@ git push -u origin dev
 
 6. Pipeline Plugin（流水线配置）
 
-![1773830271386](C:\Users\刁荣松\AppData\Local\Temp\1773830271386.png)
+![image-20260729032450732](C:\Users\刁荣松\Desktop\images\image-20260729032450732.png)
 
 ### **6.1.2 配置Maven、NodeJS环境**
 
@@ -578,7 +568,7 @@ git push -u origin dev
 
 5. 点击页面底部「保存」，完成环境配置
 
-![1773830335630](C:\Users\刁荣松\AppData\Local\Temp\1773830335630.png)
+![image-20260729032521452](C:\Users\刁荣松\Desktop\images\image-20260729032521452.png)
 
 ### **6.1.3 关联GitLab（授权拉取代码）**
 
@@ -598,18 +588,18 @@ git push -u origin dev
 
 7. 点击「保存」，完成GitLab关联
 
-   ![1773830429208](C:\Users\刁荣松\AppData\Local\Temp\1773830429208.png)
+   ![image-20260729032850184](C:\Users\刁荣松\Desktop\images\image-20260729032850184.png)
 
 ### **6.1.4 配置Docker Agent构建机（关联Jenkins）**
 
 1. 获取Docker Agent节点密钥（用于Jenkins远程连接）：登录Docker Agent节点（192.168.44.10），执行以下命令：
     # 生成密钥（无需输入密码，直接回车即可）
-ssh-keygen -t rsa
-\# 查看公钥内容，复制全部内容
-cat ~/.ssh/id_rsa.pub
-\# 将公钥添加到authorized_keys，授权Jenkins访问
-cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
+    ssh-keygen -t rsa
+    \# 查看公钥内容，复制全部内容
+    cat ~/.ssh/id_rsa.pub
+    \# 将公钥添加到authorized_keys，授权Jenkins访问
+    cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+    chmod 600 ~/.ssh/authorized_keys
 
 2. Jenkins配置Docker Agent：点击「系统管理」→「节点管理」→「新建节点」，配置如下：
 Node name：Docker-Agent-192.168.44.10（自定义，便于识别）
@@ -628,7 +618,7 @@ Node name：Docker-Agent-192.168.44.10（自定义，便于识别）
 
 9. 点击「保存」，然后点击节点名称，点击「启动代理」，显示「Agent is connected」即关联成功
 
-![1773830548038](C:\Users\刁荣松\AppData\Local\Temp\1773830548038.png)
+![image-20260729033436689](C:\Users\刁荣松\Desktop\images\image-20260729033436689.png)
 
 ## 6.2 编写统一Jenkinsfile及相关配置文件（提交到GitLab）
 
@@ -859,11 +849,11 @@ CMD ["nginx", "-g", "daemon off;"]
 
 2. 点击构建记录（如#1），点击「Console Output」，查看构建日志，确保每个阶段（拉取代码、并行构建前后端、并行构建镜像、并行推送镜像、清理镜像）无报错，最终显示「前后端统一流水线构建成功！」
 
-3. 验证Harbor镜像：登录Harbor（http://192.168.44.30），进入ruoyi-cloud项目，查看是否同时存在ruoyi-cloud-backend:v1.0.0和ruoyi-cloud-frontend:v1.0.0两个镜像
+   ![image-20260729033705994](C:\Users\刁荣松\Desktop\images\image-20260729033705994.png)
 
-   ![1773831214727](C:\Users\刁荣松\AppData\Local\Temp\1773831214727.png)
+3. 验证Harbor镜像：登录Harbor（http://192.168.44.30），进入ruoyi-cloud项目，查看是否同时存在前端和后端的镜像
 
-   ![1773831231961](C:\Users\刁荣松\AppData\Local\Temp\1773831231961.png)
+   ![image-20260729033804580](C:\Users\刁荣松\Desktop\images\image-20260729033804580.png)
 
 
 
@@ -880,11 +870,11 @@ cd /root/ruoyi-cloud-k8s
 
 2. 配置K8s拉取Harbor私有镜像的密钥（避免拉取镜像时权限不足）：
     # 创建密钥（name自定义，如harbor-secret；server为Harbor地址；username和password为Harbor账号密码）
-kubectl create secret docker-registry harbor-secret --docker-server=192.168.44.30 --docker-username=admin --docker-password=123456
-\# 查看密钥是否创建成功
-kubectl get secrets
+    kubectl create secret docker-registry harbor-secret --docker-server=192.168.44.30 --docker-username=admin --docker-password=123456
+    \# 查看密钥是否创建成功
+    kubectl get secrets
 
-![1773831982149](C:\Users\刁荣松\AppData\Local\Temp\1773831982149.png)
+![image-20260729034205035](C:\Users\刁荣松\Desktop\images\image-20260729034205035.png)
 
 ## **7.2 中间件服务部署（ruoyi-cloud-backend）**
 
@@ -929,19 +919,19 @@ kubectl get secrets
    
    ```
 
-   ![1773832443754](C:\Users\刁荣松\AppData\Local\Temp\1773832443754.png)
+   ![image-20260729034255587](C:\Users\刁荣松\Desktop\images\image-20260729034255587.png)
 
 ### **7.2.2 创建Deployment（部署后端容器）**
 
 
 
-![1773834344194](C:\Users\刁荣松\AppData\Local\Temp\1773834344194.png)
+![image-20260729034943705](C:\Users\刁荣松\Desktop\images\image-20260729034943705.png)
 
 
 
 ### **7.2.3 创建Service（暴露后端服务，供前端访问）**
 
-![1773834477103](C:\Users\刁荣松\AppData\Local\Temp\1773834477103.png)
+![image-20260729035032696](C:\Users\刁荣松\Desktop\images\image-20260729035032696.png)
 
 
 ## 7.3 服务部署
@@ -1658,28 +1648,329 @@ spec:
 }
 ```
 
+![image-20260729035127279](C:\Users\刁荣松\Desktop\images\image-20260729035127279.png)
+
 ## **7.4 部署验证（检查所有资源状态）**
 
 2. 确保所有资源状态正常：ConfigMap存在、Deployment READY 1/1、Pod Running、Service正常暴露端口，后端Pod日志无报错。
 
-![1773831397699](C:\Users\刁荣松\AppData\Local\Temp\1773831397699.png)
+![image-20260729035143502](C:\Users\刁荣松\Desktop\images\image-20260729035143502.png)
 
 **补充说明**：若Pod状态为Pending，可能是镜像拉取失败（检查密钥、Harbor地址）；若为CrashLoopBackOff，查看Pod日志排查配置问题（如数据库、Nacos连接失败）。
 
 # 8.0效果展示
 
- 前端登录：![1773831459615](C:\Users\刁荣松\AppData\Local\Temp\1773831459615.png)
+ 前端登录：![image-20260729035226954](C:\Users\刁荣松\Desktop\images\image-20260729035226954.png)
 
 页面展示：
 
-![1773831494210](C:\Users\刁荣松\AppData\Local\Temp\1773831494210.png)
+![image-20260729035252805](C:\Users\刁荣松\Desktop\images\image-20260729035252805.png)
 
-![1773831508696](C:\Users\刁荣松\AppData\Local\Temp\1773831508696.png)
+![image-20260729035329468](C:\Users\刁荣松\Desktop\images\image-20260729035329468.png)
 
 minio展示：
 
-![1773831653272](C:\Users\刁荣松\AppData\Local\Temp\1773831653272.png)
+![image-20260729035605129](C:\Users\刁荣松\Desktop\images\image-20260729035605129.png)
 
 监控：
 
-![1773831689698](C:\Users\刁荣松\AppData\Local\Temp\1773831689698.png)
+![image-20260729035622191](C:\Users\刁荣松\Desktop\images\image-20260729035622191.png)
+
+
+
+nacos展示：
+
+![image-20260729035647545](C:\Users\刁荣松\Desktop\images\image-20260729035647545.png)
+
+# 9. 生产级高可用架构升级
+
+本章从应用服务、中间件、入口网络、数据容灾四个维度消除单点故障，将单副本测试环境升级为生产级高可用架构，保障业务连续性。
+
+## 9.1 应用服务层高可用
+
+### 9.1.1 多副本与 Pod 反亲和部署
+
+核心服务（网关、认证、系统模块）配置多副本，通过反亲和策略强制分散到不同物理节点，避免单节点故障导致核心链路中断。
+
+- **基础版（低配置环境适用）**：网关、认证、系统服务 2 副本，其余非核心服务 1 副本
+- **进阶版**：所有业务服务 ≥2 副本，强制节点反亲和
+
+Deployment 配置示例（以网关为例）：
+
+```yaml
+spec:
+  replicas: 2
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app: ruoyi-cloud-gateway
+        topologyKey: kubernetes.io/hostname
+```
+
+### 9.1.2 Pod 干扰预算（PDB）
+
+为核心服务配置 `PodDisruptionBudget`，确保节点维护、集群驱逐等运维操作期间，核心服务最小可用副本数不低于阈值，避免人为操作导致业务中断。
+
+```yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ruoyi-gateway-pdb
+  namespace: default
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: ruoyi-cloud-gateway-pod
+```
+
+### 9.1.3 水平自动扩缩容（HPA）
+
+基于 CPU / 内存使用率配置自动扩缩容，应对流量突发波动；网关层可后续扩展基于 QPS 的自定义指标扩缩容。
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ruoyi-gateway-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ruoyi-cloud-gateway-deployment
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+```
+
+### 9.1.4 优雅启停与无损发布
+
+优化滚动更新策略与探针参数，配合 Nacos 服务优雅上下线，确保版本发布、Pod 重建过程中业务请求无中断、无报错。
+
+```yaml
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  terminationGracePeriodSeconds: 60
+  lifecycle:
+    preStop:
+      exec:
+        command: ["/bin/sh", "-c", "sleep 20 && curl -X POST http://127.0.0.1:8080/actuator/shutdown"]
+```
+
+## 9.2 核心中间件高可用
+
+### 9.2.1 Nacos 注册配置中心集群化
+
+Nacos 为微服务核心依赖，单实例故障会导致全链路服务注册发现失效，生产环境升级为 3 节点集群模式。
+
+- 集群模式：3 节点 Raft 集群，数据持久化到外置 MySQL
+- 健康检查：配置存活 / 就绪探针，故障节点自动剔除
+- 配置备份：每日自动导出 Nacos 配置快照，支持一键回滚
+
+### 9.2.2 MySQL 主从复制与读写分离
+
+数据库为核心单点，生产环境升级为**一主一从 / 一主两从**架构，基于 Binlog 主从同步，配合读写分离分担查询压力。
+
+- 主库：负责写请求与核心读请求
+- 从库：负责报表、查询类非核心读请求
+- 自动切换：可配合 MHA/Keepalived 实现主库故障自动切换
+
+### 9.2.3 Redis 哨兵模式高可用
+
+缓存服务升级为 **Redis Sentinel（3 节点哨兵 + 1 主 1 从）**，哨兵集群实时监控主从节点状态，主节点故障时自动选举新主节点，避免缓存单点故障引发业务雪崩。
+
+- 持久化：开启 RDB + AOF 混合持久化
+- 缓存兜底：核心接口配置本地二级缓存，应对 Redis 集群短暂不可用场景
+
+## 9.3 入口与网络层高可用
+
+### 9.3.1 Ingress Nginx 多副本部署
+
+Ingress 控制器配置 2~3 副本，配合 Pod 反亲和性分散到不同节点，避免入口层单点故障。
+
+- 云环境：配合云厂商负载均衡（SLB/CLB）挂载所有 Ingress 节点
+- 自建集群：配合 Keepalived + VIP 实现入口漂移
+
+### 9.3.2 网关层限流与熔断降级
+
+基于 Spring Cloud Gateway + Sentinel 实现网关层流量治理，防范流量突增与依赖故障雪崩。
+
+- 限流：按 IP、接口、用户维度配置限流规则，保护后端服务
+- 熔断：下游服务故障时自动熔断，返回降级兜底响应，避免故障传导
+- 热点参数限流：针对登录、查询等热点接口做专项限流
+
+### 9.3.3 VIP 漂移方案（自建集群适用）
+
+在 Ingress 节点部署 Keepalived，绑定虚拟 VIP，单 Ingress 节点故障时 VIP 自动漂移到健康节点，实现入口层无感知故障转移。
+
+## 9.4 数据备份与容灾指标
+
+### 9.4.1 核心数据备份策略
+
+| 数据类型       | 备份方式                     | 备份频率                | 保留周期 |
+| -------------- | ---------------------------- | ----------------------- | -------- |
+| MySQL 业务数据 | mysqldump 全量 + Binlog 增量 | 每日全量 / 每小时增量   | 30 天    |
+| Redis 缓存数据 | RDB 快照备份                 | 每日一次                | 7 天     |
+| Nacos 配置数据 | 配置快照导出                 | 每日一次 + 变更实时备份 | 90 天    |
+| 用户上传文件   | 存储快照 + 异地备份          | 每日增量                | 90 天    |
+
+### 9.4.2 容灾验收指标
+
+- **RTO（恢复时间目标）**：核心业务故障恢复时间 ≤ 30 分钟
+- **RPO（恢复点目标）**：数据丢失量 ≤ 1 小时
+- **月度可用性**：核心业务 SLA ≥ 99.95%
+
+------
+
+# 10. 全链路可观测性与监控告警体系
+
+本章构建设施层、中间件层、业务层三层监控体系，配套统一日志采集与分级告警，实现故障提前预警、根因快速定位。
+
+## 10.1 三层监控指标体系
+
+| 监控层级   | 监控对象                   | 核心监控指标                                                 | 采集方式                           |
+| ---------- | -------------------------- | ------------------------------------------------------------ | ---------------------------------- |
+| 基础设施层 | 服务器节点、K8s 集群       | CPU / 内存 / 磁盘 / 网络使用率、节点状态、Pod 异常率、集群资源配额使用率 | Node Exporter + Kube State Metrics |
+| 中间件层   | MySQL、Redis、Nacos、MinIO | MySQL 连接数 / 慢查询 / 主从延迟、Redis 命中率 / 内存碎片率、Nacos 服务健康数、MinIO 存储使用率 | 对应官方 Exporter                  |
+| 业务应用层 | 各微服务、前端             | 接口 QPS、错误率、响应耗时（P95/P99）、JVM 堆内存 / GC 次数、线程数、服务注册健康状态 | Spring Boot Actuator + Prometheus  |
+
+> **基础版落地建议**：优先部署基础设施层 + 中间件层监控，业务层先覆盖网关、认证、系统核心服务，后续再全量铺开。
+
+## 10.2 统一日志采集方案
+
+采用 **ELK（Elasticsearch + Logstash + Kibana）** 或轻量版 **Loki + Promtail** 方案，统一采集所有节点、Pod 日志，实现全链路日志检索与故障溯源。
+
+1. 日志规范：所有 Java 服务统一日志格式，携带 TraceID，支持链路串联
+2. 日志分级：严格区分 debug/info/warn/error 四级，错误日志必须携带异常栈
+3. 留存策略：生产环境普通日志留存 30 天，错误审计日志留存 90 天
+
+## 10.3 三级告警响应机制
+
+| 告警级别 | 触发条件                                               | 通知渠道               | 响应时效        | 处理要求                           |
+| -------- | ------------------------------------------------------ | ---------------------- | --------------- | ---------------------------------- |
+| 提示级   | 磁盘使用率超 80%、非核心接口慢查询、单副本异常         | 邮件 / 内部消息        | 工作日 4 小时内 | 记录并安排窗口期处理               |
+| 警告级   | 单服务副本不可用、接口错误率超 5%、中间件主从延迟过高  | 短信 + 内部消息        | 1 小时内响应    | 立即排查，避免升级为严重故障       |
+| 严重级   | 核心服务整体不可用、数据库主库宕机、业务可用性低于 99% | 电话 + 短信 + 消息轮播 | 15 分钟内响应   | 立即启动故障应急预案，优先恢复业务 |
+
+## 10.4 监控快速接入示例
+
+通过 ServiceMonitor 接入 Spring Boot 业务指标，示例配置：
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ruoyi-gateway-monitor
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: ry-cloud-gateway-service
+  endpoints:
+  - port: 8080
+    path: /actuator/prometheus
+    interval: 15s
+```
+
+------
+
+# 11. 混沌工程与故障演练规范
+
+通过主动注入故障验证微服务架构韧性，暴露潜在风险，确保高可用能力真实可用，同时沉淀标准化故障排查 SOP。
+
+## 11.1 核心演练场景清单（微服务专属）
+
+### 基础设施类
+
+- 随机杀死 Worker 节点，验证 K8s 自动调度与服务自愈能力
+- 模拟网络分区 / 网络延迟，验证微服务注册发现与重试容错表现
+- 磁盘空间打满、CPU 资源耗尽，验证监控告警与服务降级逻辑
+
+### 应用服务类
+
+- 随机删除网关 / 认证服务 Pod，验证服务自动恢复与流量无损切换
+- 模拟服务 OOM 崩溃，验证重启机制与业务影响范围
+- 触发滚动发布异常，验证版本回滚能力与业务恢复时效
+
+### 依赖组件类
+
+- 模拟 Nacos 注册中心宕机，验证服务本地缓存与容错能力
+- 模拟 MySQL 主库宕机，验证主从切换与业务恢复时效
+- 模拟 Redis 连接中断，验证缓存降级与业务雪崩防护效果
+- 模拟 MinIO 文件存储不可用，验证文件上传下载兜底策略
+
+### 流量压力类
+
+- 模拟登录、查询等热点接口突发高并发，验证限流策略与网关承载能力
+- 模拟慢接口拖垮服务，验证熔断降级机制是否生效
+
+## 11.2 标准化演练流程
+
+1. **演练前准备**
+   - 制定详细演练方案，明确演练范围、停止条件、回滚预案
+   - 优先在测试环境执行，验证无误后再在生产环境低峰期演练
+   - 通知相关业务方，预留运维值守人员
+2. **演练中执行**
+   - 按方案逐步注入故障，实时监控业务指标与服务状态
+   - 记录故障触发时间、自动恢复时间、人工介入操作步骤、业务影响范围
+   - 出现超出预期的严重影响时，立即执行回滚，终止演练
+3. **演练后复盘**
+   - 输出完整故障演练报告，统计 MTTR、MTBF 核心指标
+   - 梳理暴露的问题与架构短板，制定优化排期
+   - 更新故障排查手册与应急预案，沉淀运维经验
+
+## 11.3 演练验收标准
+
+- 单副本故障：业务无感知，服务自动恢复，业务错误率 < 1%
+- 单节点故障：核心业务在 RTO 时间内恢复，核心数据零丢失
+- 依赖组件故障：触发降级策略，核心登录、查询功能可用，不发生雪崩效应
+- 故障触发后 1 分钟内产生对应级别告警，通知到责任人
+
+------
+
+# 12. 生产运维管理规范
+
+## 12.1 变更发布管理
+
+- 生产环境发布严格遵循「开发验证 → 测试环境验证 → 灰度放量 → 全量发布」流程
+- 灰度发布先切 10% 流量验证，观察 30 分钟无异常后逐步全量
+- 所有版本保留一键回滚能力，发布窗口优先选择业务低峰期
+- 重大变更提前报备，留存变更记录与回滚方案
+
+## 12.2 容量规划与资源治理
+
+- 每季度执行一次容量评估，结合业务增长趋势提前扩容，避免资源瓶颈
+- 严格执行 Namespace 资源配额与 LimitRange 限制，避免单业务占用过多集群资源
+- 每月清理闲置资源与过期镜像，释放存储与计算资源
+
+## 12.3 定期灾备演练要求
+
+- 每季度执行一次数据库备份恢复演练，验证备份文件真实可用
+- 每半年执行一次全链路容灾切换演练，验证完整灾备流程
+- 所有演练留存书面报告，问题点闭环跟进整改
+
+## 12.4 安全加固规范
+
+- **镜像安全**：基础镜像定期漏洞扫描，生产镜像禁止使用 latest 标签，统一走内网 Harbor 仓库
+- **配置安全**：数据库密码、Nacos 密钥等敏感信息全部通过 K8s Secret / ConfigMap 管理，禁止明文写入代码
+- **网络安全**：通过 NetworkPolicy 限制服务间访问权限，非必要端口不对外暴露
+- **权限管控**：遵循最小权限原则，生产环境操作实行双人复核机制，操作日志全程留存审计
