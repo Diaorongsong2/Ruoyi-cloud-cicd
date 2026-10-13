@@ -321,7 +321,7 @@ docker-compose ps
 
 1. 浏览器访问：http://192.168.44.30（默认80端口）
 
-2. 使用账号：admin，密码：123456登录
+2. 使用账号：admin，密码：<YOUR_PASSWORD>登录
 3. 登录后，创建项目（命名为ruoyi-cloud，用于存储若依项目镜像
 
 ![Harbor创建私有项目仓库](images/image-20260729031244317.png)
@@ -429,7 +429,7 @@ git clone https://gitee.com/y_project/RuoYi-Cloud.git ruoyi-cloud
 2. 创建MySQL数据库：登录本地MySQL，执行项目中sql目录下的脚本（ry_20210908.sql、ry_config_20210908.sql），创建ry-cloud、ry-config两个数据库
 3. 修改后端配置文件（核心修改3处）：
 
-￮ 修改ruoyi-admin模块（ruoyi-cloud\ruoyi-admin\src\main\resources）下的application-druid.yml：配置本地MySQL地址、账号、密码（url: jdbc:mysql://localhost:3306/ry-cloud?xxx，username: root，password: Root@123）
+￮ 修改ruoyi-admin模块（ruoyi-cloud\ruoyi-admin\src\main\resources）下的application-druid.yml：配置本地MySQL地址、账号、密码（url: jdbc:mysql://localhost:3306/ry-cloud?xxx，username: root，password: <YOUR_PASSWORD>）
 
 ￮ 修改ruoyi-admin模块下的bootstrap.yml：配置本地Redis（host: localhost，port: 6379）、本地Nacos（server-addr: localhost:8848）
 
@@ -458,7 +458,7 @@ git clone https://gitee.com/y_project/RuoYi-Cloud.git ruoyi-cloud
 
 ### **4.3.3 核心功能验证**
 
-1. 登录：使用默认账号admin，密码admin123登录系统
+1. 登录：使用默认账号admin，密码<YOUR_PASSWORD>登录系统
 
 2. 验证功能：访问“系统管理→用户管理”，查看用户列表；点击“新增用户”，测试新增功能；访问“代码生成”，测试代码生成功能
 
@@ -654,9 +654,9 @@ pipeline {
         NACOS_INNER_ADDR = "ry-cloud-nacos-service:8848"
         MYSQL_ADDR = "ry-cloud-mysql-service:3306"
         MYSQL_USER = "root"
-        MYSQL_PWD = "123456"
+        MYSQL_PWD = credentials('ruoyi-mysql-pwd')
         REDIS_ADDR = "ry-cloud-redis-service:6379"
-        REDIS_PWD = "123456"
+        REDIS_PWD = credentials('ruoyi-redis-pwd')
         // 构建路径配置
         JENKINS_WORKSPACE = "${WORKSPACE}"
         NODE_OPTIONS = "--max_old_space_size=1024"
@@ -869,7 +869,7 @@ cd /root/ruoyi-cloud-k8s
 
 2. 配置K8s拉取Harbor私有镜像的密钥（避免拉取镜像时权限不足）：
     # 创建密钥（name自定义，如harbor-secret；server为Harbor地址；username和password为Harbor账号密码）
-    kubectl create secret docker-registry harbor-secret --docker-server=192.168.44.30 --docker-username=admin --docker-password=123456
+    kubectl create secret docker-registry harbor-secret --docker-server=192.168.44.30 --docker-username=admin --docker-password=<YOUR_PASSWORD>
     \# 查看密钥是否创建成功
     kubectl get secrets
 
@@ -1632,7 +1632,7 @@ spec:
             echo "✅ 全部部署成功！"
             echo "前端访问地址：http://${K8S_MASTER}:${UI_NODE_PORT}"
             echo "监控服务地址：http://${K8S_MASTER}:${MONITOR_NODE_PORT}"
-            echo "测试登录接口：curl -X POST http://${K8S_MASTER}:${UI_NODE_PORT}/prod-api/auth/login -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":\"123456\"}'"
+            echo "测试登录接口：curl -X POST http://${K8S_MASTER}:${UI_NODE_PORT}/prod-api/auth/login -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":\"<YOUR_PASSWORD>\"}'"
         }
         failure {
             echo "❌ 部署失败！请查看以下日志排查问题："
