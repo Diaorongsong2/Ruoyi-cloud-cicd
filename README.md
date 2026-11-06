@@ -4,7 +4,7 @@
 
 `GitLab 代码托管` → `Jenkins 自动构建` → `Harbor 私有镜像仓库` → `Kubernetes 滚动发布`
 
-整套多节点环境为手动搭建，过程中沉淀的配置、脚本与报错记录都整理在这个仓库里。
+整套 7 台机器的环境为手动搭建，过程中沉淀的配置、脚本与报错记录都整理在这个仓库里。
 
 ---
 
@@ -48,17 +48,19 @@
 | 监控接入 | Prometheus Operator | ServiceMonitor 自动抓取 |
 | 依赖中间件 | MySQL / Redis | 业务数据与缓存 |
 
-**节点角色规划**（内网 `192.168.44.0/24`）：
+**节点角色规划**（内网 `192.168.44.0/24`，一共 7 台）：
 
-| 节点 | 角色 |
-|---|---|
-| `.10` | 构建 Agent（Maven + Node.js + Git） |
-| `.23` | Jenkins 服务端 |
-| `.24` | GitLab 服务端 |
-| `.30` | Harbor 服务端 |
-| 集群节点 | K8s（复用已有环境，未重新搭建） |
+| 节点 | 地址 | 角色 | 跑什么 |
+|---|---|---|---|
+| K8s Master | `.20` | 集群控制面 | kube-apiserver、etcd，业务库 MySQL |
+| K8s Node1 | `.21` | 工作节点 | kubelet、kube-proxy，Redis 与 Nacos |
+| K8s Node2 | `.22` | 工作节点 | kubelet、kube-proxy，负载分担 |
+| 构建 Agent | `.10` | Jenkins 远程执行节点 | Docker、Maven、Node.js、Git |
+| Jenkins | `.23` | 流水线调度 | Jenkins 2.426.3 |
+| GitLab | `.24` | 代码托管 | GitLab 16.0.0 |
+| Harbor | `.30` | 私有镜像仓库 | Harbor 2.8.3 |
 
-操作系统 CentOS 7.9 x86_64。
+前 3 台是之前就搭好的 K8s v1.26.3 集群，这次直接复用没重装；后 4 台是为这条流水线单独配的。操作系统 CentOS 7.9 x86_64。
 
 ## 三、仓库结构
 
